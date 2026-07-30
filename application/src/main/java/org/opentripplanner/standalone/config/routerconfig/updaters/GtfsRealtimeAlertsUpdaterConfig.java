@@ -12,7 +12,7 @@ public class GtfsRealtimeAlertsUpdaterConfig {
   public static GtfsRealtimeAlertsUpdaterParameters create(String configRef, NodeAdapter c) {
     return new GtfsRealtimeAlertsUpdaterParameters(
       configRef,
-      c.of("feedId").since(V1_5).summary("The id of the feed to apply the alerts to.").asString(),
+      FeedIdsConfig.read(c, V1_5),
       c.of("url").since(V1_5).summary("URL to fetch the GTFS-RT feed from.").asString(),
       c
         .of("earlyStartSec")

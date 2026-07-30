@@ -3,6 +3,7 @@ package org.opentripplanner.updater.trip.patterncache;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
+import javax.annotation.Nullable;
 import org.opentripplanner.transit.model.network.StopPattern;
 import org.opentripplanner.transit.model.network.TripPattern;
 import org.opentripplanner.transit.model.timetable.Trip;
@@ -44,6 +45,14 @@ public class TripPatternCache {
   private final Function<Trip, TripPattern> getPatternForTrip;
 
   /**
+   * Optional: when set, brand-new patterns for ADDED trips reuse hop geometries from
+   * existing static patterns on the same route. When null, the new pattern has no stored
+   * geometry and the API falls back to straight stop-to-stop lines.
+   */
+  @Nullable
+  private final AddedTripHopGeometryResolver hopGeometryResolver;
+
+  /**
    * @param getPatternForTrip TripPatternCache needs only this one feature of TransitService, so we retain
    *                          only this function reference to effectively narrow the interface. This should also facilitate
    *                          testing.
@@ -52,8 +61,17 @@ public class TripPatternCache {
     TripPatternIdGenerator tripPatternIdGenerator,
     Function<Trip, TripPattern> getPatternForTrip
   ) {
+    this(tripPatternIdGenerator, getPatternForTrip, null);
+  }
+
+  public TripPatternCache(
+    TripPatternIdGenerator tripPatternIdGenerator,
+    Function<Trip, TripPattern> getPatternForTrip,
+    @Nullable AddedTripHopGeometryResolver hopGeometryResolver
+  ) {
     this.tripPatternIdGenerator = tripPatternIdGenerator;
     this.getPatternForTrip = getPatternForTrip;
+    this.hopGeometryResolver = hopGeometryResolver;
   }
 
   /**
@@ -80,14 +98,27 @@ public class TripPatternCache {
     // Create TripPattern if it doesn't exist yet
     if (tripPattern == null) {
       var id = tripPatternIdGenerator.generateUniqueTripPatternId(trip);
-      tripPattern = TripPattern.of(id)
+      var builder = TripPattern.of(id)
         .withRoute(trip.getRoute())
         .withMode(trip.getMode())
         .withNetexSubmode(trip.getNetexSubMode())
         .withStopPattern(stopPattern)
         .withRealTimeStopPatternModified()
-        .withOriginalTripPattern(originalTripPattern)
-        .build();
+        .withOriginalTripPattern(originalTripPattern);
+
+      // Reuse hop geometries from existing patterns so the resulting polyline tracks real
+      // alignments instead of straight stop-to-stop lines. This is needed when there is no
+      // original pattern to inherit from (ADDED trips) and also when there is one but it
+      // carries no shape — inheriting from it would just yield straight lines.
+      boolean originalHasShape =
+        originalTripPattern != null && originalTripPattern.getGeometry() != null;
+      if (!originalHasShape && hopGeometryResolver != null) {
+        hopGeometryResolver
+          .resolve(stopPattern, trip.getRoute())
+          .ifPresent(builder::withHopGeometries);
+      }
+
+      tripPattern = builder.build();
 
       // Add pattern to cache
       cache.put(stopPattern, tripPattern);

@@ -161,6 +161,18 @@ public final class TimetableSnapshotManager {
   }
 
   /**
+   * Clear data of snapshot scoped to the provided feed id and a subset of routes. Used when
+   * multiple updaters share a feed id (e.g. NYCT's per-line GTFS-RT URLs all writing to
+   * {@code mta-subway}) and each is authoritative only for its own slice.
+   */
+  public void clearBufferForRoutes(
+    String feedId,
+    java.util.Set<org.opentripplanner.core.model.id.FeedScopedId> routeIds
+  ) {
+    buffer.clear(feedId, routeIds);
+  }
+
+  /**
    * Update the TripTimes of one Trip in a Timetable of a TripPattern. If the Trip of the TripTimes
    * does not exist yet in the Timetable, add it. This method will make a protective copy of the
    * Timetable if such a copy has not already been made while building up this snapshot, handling

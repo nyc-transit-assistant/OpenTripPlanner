@@ -213,6 +213,54 @@ public class TripUpdateBuilder {
     );
   }
 
+  public TripUpdateBuilder addStopTimeWithArrivalAndDeparture(
+    String stopId,
+    @Nullable String arrivalTime,
+    @Nullable String departureTime
+  ) {
+    return addStopTime(
+      stopId,
+      arrivalTime,
+      departureTime,
+      NO_STOP_SEQUENCE,
+      NO_DELAY,
+      NO_DELAY,
+      DEFAULT_SCHEDULE_RELATIONSHIP,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    );
+  }
+
+  /**
+   * Add a stop time with only an arrival (no departure), with the arrival carrying both time
+   * and delay. Mirrors how NYCT's L feed reports terminal stops.
+   */
+  public TripUpdateBuilder addStopTimeWithArrivalTimeAndDelay(
+    String stopId,
+    String arrivalTime,
+    int arrivalDelay
+  ) {
+    return addStopTime(
+      stopId,
+      arrivalTime,
+      null,
+      NO_STOP_SEQUENCE,
+      arrivalDelay,
+      NO_DELAY,
+      DEFAULT_SCHEDULE_RELATIONSHIP,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    );
+  }
+
   public TripUpdateBuilder addDelayedStopTime(int stopSequence, int delay) {
     return addStopTime(
       null,

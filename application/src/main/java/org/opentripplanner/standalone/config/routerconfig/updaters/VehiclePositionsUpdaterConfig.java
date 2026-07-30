@@ -15,11 +15,7 @@ import org.opentripplanner.updater.vehicle_position.VehiclePositionsUpdaterParam
 public class VehiclePositionsUpdaterConfig {
 
   public static VehiclePositionsUpdaterParameters create(String updaterRef, NodeAdapter c) {
-    var feedId = c
-      .of("feedId")
-      .since(V2_2)
-      .summary("Feed ID to which the update should be applied.")
-      .asString();
+    var feedIds = FeedIdsConfig.read(c, V2_2);
     var frequency = c
       .of("frequency")
       .since(V2_2)
@@ -43,7 +39,7 @@ public class VehiclePositionsUpdaterConfig {
     var headers = HttpHeadersConfig.headers(c, V2_3);
     return new VehiclePositionsUpdaterParameters(
       updaterRef,
-      feedId,
+      feedIds,
       url,
       frequency,
       headers,

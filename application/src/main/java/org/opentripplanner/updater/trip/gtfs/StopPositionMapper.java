@@ -39,22 +39,36 @@ class StopPositionMapper {
    * @param listIndex The list index of the update in the list of stop time updates
    */
   int stopPositionInPattern(int listIndex, StopTimeUpdate update) throws UpdateException {
-    if (update.stopSequence().isPresent()) {
-      return handleStopSequence(listIndex, update);
-    } else if (update.stopId().isPresent()) {
-      return handleStopId(listIndex, update.stopId().get());
-    } else {
+    boolean hasSeq = update.stopSequence().isPresent();
+    boolean hasStopId = update.stopId().isPresent();
+    if (!hasSeq && !hasStopId) {
       throw UpdateException.of(tripId, INVALID_STOP_REFERENCE, listIndex);
     }
+    // When both are present, trust the sequence only if it agrees with the stop_id. NYCT's L
+    // feed reports stop_sequence as 0-indexed while the static schedule is 1-indexed, so seq=N
+    // in the update resolves to the stop at static position N (which is the *next* stop in
+    // pattern order). A strict sequence lookup either fails or — worse — silently lands the
+    // update on the wrong stop. Treating stop_id as authoritative on disagreement avoids both.
+    if (hasSeq && hasStopId) {
+      var seqPos = tripTimes.stopPositionForGtfsSequence(update.stopSequence().getAsInt());
+      var providedStopId = update.stopId().get();
+      if (seqPos.isPresent() && stopIds.get(seqPos.getAsInt()).equals(providedStopId)) {
+        return seqPos.getAsInt();
+      }
+      return handleStopId(listIndex, providedStopId);
+    }
+    if (hasSeq) {
+      return handleStopSequence(listIndex, update);
+    }
+    return handleStopId(listIndex, update.stopId().get());
   }
 
   private int handleStopSequence(int listIndex, StopTimeUpdate update) throws UpdateException {
     var pos = tripTimes.stopPositionForGtfsSequence(update.stopSequence().getAsInt());
-    if (pos.isEmpty()) {
-      throw UpdateException.of(tripId, INVALID_STOP_SEQUENCE, listIndex);
-    } else {
+    if (pos.isPresent()) {
       return pos.getAsInt();
     }
+    throw UpdateException.of(tripId, INVALID_STOP_SEQUENCE, listIndex);
   }
 
   private int handleStopId(int listIndex, String stopId) throws UpdateException {

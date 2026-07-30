@@ -2,6 +2,7 @@ package org.opentripplanner.updater.trip.gtfs.updater.http;
 
 import com.google.transit.realtime.GtfsRealtime.TripUpdate;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import org.opentripplanner.updater.spi.PollingGraphUpdater;
@@ -26,9 +27,10 @@ public class PollingTripUpdater extends PollingGraphUpdater {
   private final GtfsRealTimeTripUpdateAdapter adapter;
 
   /**
-   * Feed id that is used for the trip ids in the TripUpdates
+   * Static GTFS feeds that this real-time updater applies updates to. Each incoming trip
+   * update is matched against these feeds in order.
    */
-  private final String feedId;
+  private final List<String> feedIds;
 
   /**
    * Defines when delays are propagated to next stops.
@@ -46,18 +48,25 @@ public class PollingTripUpdater extends PollingGraphUpdater {
    */
   private final boolean fuzzyTripMatching;
 
+  /**
+   * If true, look up realtime trip ids as suffixes of the static GTFS trip id
+   * (e.g. for MTA NYC Subway).
+   */
+  private final boolean partialTripIdMatching;
+
   public PollingTripUpdater(
     PollingTripUpdaterParameters parameters,
     GtfsRealTimeTripUpdateAdapter adapter
   ) {
     super(parameters);
     // Create update streamer from preferences
-    this.feedId = parameters.feedId();
+    this.feedIds = Objects.requireNonNull(parameters.feedIds());
     this.updateSource = new HttpTripUpdateSource(parameters);
     this.forwardsDelayPropagationType = parameters.forwardsDelayPropagationType();
     this.backwardsDelayPropagationType = parameters.backwardsDelayPropagationType();
     this.adapter = adapter;
     this.fuzzyTripMatching = parameters.fuzzyTripMatching();
+    this.partialTripIdMatching = parameters.partialTripIdMatching();
 
     this.recordMetrics = BatchTripUpdateMetrics.batch(parameters);
 
@@ -79,11 +88,13 @@ public class PollingTripUpdater extends PollingGraphUpdater {
       TripUpdateGraphWriterRunnable runnable = new TripUpdateGraphWriterRunnable(
         adapter,
         fuzzyTripMatching,
+        partialTripIdMatching,
         forwardsDelayPropagationType,
         backwardsDelayPropagationType,
         incrementality,
         updates,
-        feedId,
+        updateSource.tripReplacementPeriodsOfLastUpdates(),
+        feedIds,
         recordMetrics
       );
       updateGraph(runnable);
@@ -94,7 +105,7 @@ public class PollingTripUpdater extends PollingGraphUpdater {
   public String toString() {
     return ToStringBuilder.of(this.getClass())
       .addObj("updateSource", updateSource)
-      .addStr("feedId", feedId)
+      .addCol("feedIds", feedIds)
       .addBool("fuzzyTripMatching", fuzzyTripMatching)
       .toString();
   }

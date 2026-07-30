@@ -188,8 +188,15 @@ class TripTimesUpdater {
       final StopTime stopTime = new StopTime();
       stopTime.setTrip(trip);
       stopTime.setStop(item.stop());
-      // Set arrival time
-      final var arrival = update.scheduledArrivalTimeWithRealTimeFallback();
+      // GTFS-RT permits providing only one of arrival/departure on a StopTimeUpdate. For
+      // synthesized ADDED trips we mirror the missing field so the resulting StopTime has a
+      // zero-dwell entry instead of a default-valued departure that would later fail
+      // NEGATIVE_DWELL_TIME validation. Common on NYCT terminal stops which carry only
+      // departure (origin) or only arrival (destination).
+      final var rawArrival = update.scheduledArrivalTimeWithRealTimeFallback();
+      final var rawDeparture = update.scheduledDepartureTimeWithRealTimeFallback();
+      final var arrival = rawArrival.isPresent() ? rawArrival : rawDeparture;
+      final var departure = rawDeparture.isPresent() ? rawDeparture : rawArrival;
       if (arrival.isPresent()) {
         final var arrivalTime = arrival.getAsLong() - midnightSecondsSinceEpoch;
         if (arrivalTime < 0 || arrivalTime > MAX_ARRIVAL_DEPARTURE_TIME) {
@@ -197,8 +204,6 @@ class TripTimesUpdater {
         }
         stopTime.setArrivalTime((int) arrivalTime);
       }
-      // Set departure time
-      final var departure = update.scheduledDepartureTimeWithRealTimeFallback();
       if (departure.isPresent()) {
         final long departureTime = departure.getAsLong() - midnightSecondsSinceEpoch;
         if (departureTime < 0 || departureTime > MAX_ARRIVAL_DEPARTURE_TIME) {
@@ -231,12 +236,37 @@ class TripTimesUpdater {
         builder.withCanceled(stopIndex);
       }
 
-      setArrivalAndDeparture(builder, stopIndex, addedStopTime, midnightSecondsSinceEpoch);
-      if (builder.getArrivalTime(stopIndex) == null) {
-        builder.withArrivalDelay(stopIndex, 0);
+      // Apply realtime times. NYCT terminal stops report only arrival (destination) or only
+      // departure (origin), and the present side may carry a delay. The schedule for an ADDED
+      // trip was synthesized by mirroring whichever side was given, so falling back to the
+      // scheduled value on the missing side could produce a NEGATIVE_DWELL_TIME when the
+      // present side has a non-zero delay. Instead mirror the realtime side directly so the
+      // stop has a zero-dwell entry.
+      var rtArrTime = addedStopTime.arrivalTime();
+      var rtDepTime = addedStopTime.departureTime();
+      var effArrTime = rtArrTime.isPresent() ? rtArrTime : rtDepTime;
+      var effDepTime = rtDepTime.isPresent() ? rtDepTime : rtArrTime;
+      if (effArrTime.isPresent()) {
+        builder.withArrivalTime(
+          stopIndex,
+          (int) (effArrTime.getAsLong() - midnightSecondsSinceEpoch)
+        );
+      } else {
+        var arrivalDelay = addedStopTime.arrivalDelay();
+        var departureDelay = addedStopTime.departureDelay();
+        var effArrDelay = arrivalDelay.isPresent() ? arrivalDelay : departureDelay;
+        builder.withArrivalDelay(stopIndex, effArrDelay.orElse(0));
       }
-      if (builder.getDepartureTime(stopIndex) == null) {
-        builder.withDepartureDelay(stopIndex, 0);
+      if (effDepTime.isPresent()) {
+        builder.withDepartureTime(
+          stopIndex,
+          (int) (effDepTime.getAsLong() - midnightSecondsSinceEpoch)
+        );
+      } else {
+        var arrivalDelay = addedStopTime.arrivalDelay();
+        var departureDelay = addedStopTime.departureDelay();
+        var effDepDelay = departureDelay.isPresent() ? departureDelay : arrivalDelay;
+        builder.withDepartureDelay(stopIndex, effDepDelay.orElse(0));
       }
     }
 

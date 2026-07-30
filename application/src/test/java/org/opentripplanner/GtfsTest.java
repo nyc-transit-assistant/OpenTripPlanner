@@ -241,7 +241,11 @@ public abstract class GtfsTest {
     );
     alertPatchServiceImpl = new TransitAlertServiceImpl(timetableRepository);
     alertsUpdateHandler.setTransitAlertService(alertPatchServiceImpl);
-    alertsUpdateHandler.setFeedId(FEED_ID);
+    alertsUpdateHandler.setFeedIds(List.of(FEED_ID));
+    var transitServiceForAlerts = new org.opentripplanner.transit.service.DefaultTransitService(
+      timetableRepository,
+      snapshotManager.getTimetableSnapshotBuffer()
+    );
 
     try {
       InputStream inputStream = new FileInputStream(gtfsRealTime);
@@ -253,13 +257,15 @@ public abstract class GtfsTest {
       }
       tripUpdateAdapter.applyTripUpdates(
         null,
+        null,
         ForwardsDelayPropagationType.DEFAULT,
         BackwardsDelayPropagationType.REQUIRED_NO_DATA,
         UpdateIncrementality.DIFFERENTIAL,
         updates,
-        FEED_ID
+        List.of(),
+        List.of(FEED_ID)
       );
-      alertsUpdateHandler.update(feedMessage, null);
+      alertsUpdateHandler.update(feedMessage, null, transitServiceForAlerts);
     } catch (FileNotFoundException exception) {}
     serverContext = TestServerContext.createServerContext(
       graph,

@@ -10,7 +10,7 @@ import static org.opentripplanner.updater.spi.UpdateErrorType.TRIP_NOT_FOUND_IN_
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimaps;
+import com.google.common.collect.ListMultimap;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.google.transit.realtime.GtfsRealtime.VehiclePosition;
@@ -21,7 +21,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -59,7 +62,7 @@ class RealtimeVehiclePatternMatcher {
 
   private static final Logger LOG = LoggerFactory.getLogger(RealtimeVehiclePatternMatcher.class);
 
-  private final String feedId;
+  private final List<String> feedIds;
   private final RealtimeVehicleRepository repository;
   private final ZoneId timeZoneId;
 
@@ -71,7 +74,7 @@ class RealtimeVehiclePatternMatcher {
   private Function<FeedScopedId, Set<LocalDate>> getServiceDatesForServiceId;
 
   public RealtimeVehiclePatternMatcher(
-    String feedId,
+    List<String> feedIds,
     Function<FeedScopedId, Trip> getTripForId,
     Function<Trip, TripPattern> getStaticPattern,
     BiFunction<Trip, LocalDate, TripPattern> getRealtimePattern,
@@ -81,7 +84,10 @@ class RealtimeVehiclePatternMatcher {
     GtfsRealtimeFuzzyTripMatcher fuzzyTripMatcher,
     Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures
   ) {
-    this.feedId = feedId;
+    this.feedIds = List.copyOf(Objects.requireNonNull(feedIds));
+    if (this.feedIds.isEmpty()) {
+      throw new IllegalArgumentException("feedIds must contain at least one feedId");
+    }
     this.getTripForId = getTripForId;
     this.getStaticPattern = getStaticPattern;
     this.getRealtimePattern = getRealtimePattern;
@@ -102,31 +108,31 @@ class RealtimeVehiclePatternMatcher {
     List<UpdateError> errors = new ArrayList<>();
     for (var vehiclePosition : vehiclePositions) {
       try {
-        matchResults.add(toRealtimeVehicle(feedId, vehiclePosition));
+        matchResults.add(toRealtimeVehicle(vehiclePosition));
       } catch (UpdateException e) {
         errors.add(e.toError());
       }
     }
 
-    // we take the list of vehicles and out of them create a MultiMap<TripPattern, RealtimeVehicle>
-    // that makes it very easy to update the vehicles in the service
-    var vehicles = matchResults
-      .stream()
-      .collect(
-        Multimaps.toMultimap(
-          PatternAndRealtimeVehicle::pattern,
-          PatternAndRealtimeVehicle::vehicle,
-          ArrayListMultimap::create
-        )
-      );
+    // Group matched vehicles into a MultiMap<TripPattern, RealtimeVehicle> per static feed.
+    // We must publish a result for every managed feedId — even if empty — so that prior
+    // vehicles are cleared from feeds with no entries in this batch.
+    Map<String, ListMultimap<TripPattern, RealtimeVehicle>> vehiclesByFeed = new HashMap<>();
+    for (String feedId : feedIds) {
+      vehiclesByFeed.put(feedId, ArrayListMultimap.create());
+    }
+    for (var match : matchResults) {
+      vehiclesByFeed.get(match.feedId()).put(match.pattern(), match.vehicle());
+    }
+    for (var entry : vehiclesByFeed.entrySet()) {
+      // passing the feed id leads to the previous updates being removed
+      repository.setRealtimeVehiclesForFeed(entry.getKey(), entry.getValue());
+    }
 
-    // passing the feed id leads to the previous updates being removed
-    repository.setRealtimeVehiclesForFeed(feedId, vehicles);
-
-    if (!vehiclePositions.isEmpty() && vehicles.keySet().isEmpty()) {
+    if (!vehiclePositions.isEmpty() && matchResults.isEmpty()) {
       LOG.error(
-        "Could not match any vehicle positions for feedId '{}'. Are you sure that the updater is using the correct feedId?",
-        feedId
+        "Could not match any vehicle positions for feedIds {}. Are you sure that the updater is using the correct feedIds?",
+        feedIds
       );
     }
 
@@ -137,7 +143,11 @@ class RealtimeVehiclePatternMatcher {
       .toList();
     // needs to be put into a new list so the types are correct
     var updateResult = UpdateResult.of(results, errors);
-    ResultLogger.logUpdateResult(feedId, "gtfs-rt-vehicle-positions", updateResult);
+    ResultLogger.logUpdateResult(
+      String.join(",", feedIds),
+      "gtfs-rt-vehicle-positions",
+      updateResult
+    );
 
     return updateResult;
   }
@@ -239,7 +249,7 @@ class RealtimeVehiclePatternMatcher {
 
     if (vehiclePosition.hasVehicle()) {
       var vehicle = vehiclePosition.getVehicle();
-      var id = new FeedScopedId(feedId, vehicle.getId());
+      var id = new FeedScopedId(trip.getId().getFeedId(), vehicle.getId());
       newVehicle
         .withVehicleId(id)
         .withLabel(Optional.ofNullable(vehicle.getLabel()).orElse(vehicle.getLicensePlate()));
@@ -333,15 +343,29 @@ class RealtimeVehiclePatternMatcher {
     }
   }
 
-  private VehiclePosition fuzzilySetTrip(VehiclePosition vehiclePosition) {
+  private VehiclePosition fuzzilySetTrip(VehiclePosition vehiclePosition, String feedId) {
     var trip = fuzzyTripMatcher.match(feedId, vehiclePosition.getTrip());
     return vehiclePosition.toBuilder().setTrip(trip).build();
   }
 
-  private PatternAndRealtimeVehicle toRealtimeVehicle(
-    String feedId,
-    VehiclePosition vehiclePosition
-  ) throws UpdateException {
+  /**
+   * Resolve the static feed that owns the trip referenced by a vehicle position.
+   * Returns the first feedId where the trip exists, or {@link Optional#empty()} if no
+   * configured feed contains it.
+   */
+  private Optional<TripAndFeedId> findTripAcrossFeeds(String tripId) {
+    for (String feedId : feedIds) {
+      var scopedTripId = new FeedScopedId(feedId, tripId);
+      var trip = getTripForId.apply(scopedTripId);
+      if (trip != null) {
+        return Optional.of(new TripAndFeedId(trip, feedId));
+      }
+    }
+    return Optional.empty();
+  }
+
+  private PatternAndRealtimeVehicle toRealtimeVehicle(VehiclePosition vehiclePosition)
+    throws UpdateException {
     if (!vehiclePosition.hasTrip()) {
       LOG.debug(
         "Realtime vehicle positions {} has no trip ID. Ignoring.",
@@ -350,9 +374,11 @@ class RealtimeVehiclePatternMatcher {
       throw UpdateException.noTripId(INVALID_INPUT_STRUCTURE);
     }
 
+    // Fuzzy match against the first configured feed; for multi-feed updaters this is the
+    // primary feed. Fuzzy matching across multiple feeds is not yet implemented.
     var vehiclePositionWithTripId = fuzzyTripMatcher == null
       ? vehiclePosition
-      : fuzzilySetTrip(vehiclePosition);
+      : fuzzilySetTrip(vehiclePosition, feedIds.getFirst());
 
     var tripId = vehiclePositionWithTripId.getTrip().getTripId();
 
@@ -360,16 +386,18 @@ class RealtimeVehiclePatternMatcher {
       throw UpdateException.noTripId(UpdateErrorType.NO_TRIP_ID);
     }
 
-    var scopedTripId = new FeedScopedId(feedId, tripId);
-    var trip = getTripForId.apply(scopedTripId);
-    if (trip == null) {
+    var resolved = findTripAcrossFeeds(tripId);
+    if (resolved.isEmpty()) {
       LOG.debug(
-        "Unable to find trip ID in feed '{}' for vehicle position with trip ID {}",
-        feedId,
+        "Unable to find trip ID in feeds {} for vehicle position with trip ID {}",
+        feedIds,
         tripId
       );
-      throw UpdateException.of(scopedTripId, TRIP_NOT_FOUND);
+      throw UpdateException.of(new FeedScopedId(feedIds.getFirst(), tripId), TRIP_NOT_FOUND);
     }
+    var trip = resolved.get().trip();
+    var ownerFeedId = resolved.get().feedId();
+    var scopedTripId = trip.getId();
 
     var serviceDate = Optional.of(vehiclePositionWithTripId.getTrip().getStartDate())
       .map(Strings::emptyToNull)
@@ -398,8 +426,14 @@ class RealtimeVehiclePatternMatcher {
       staticTripTimes::stopPositionForGtfsSequence
     );
 
-    return new PatternAndRealtimeVehicle(pattern, newVehicle);
+    return new PatternAndRealtimeVehicle(pattern, newVehicle, ownerFeedId);
   }
 
-  private record PatternAndRealtimeVehicle(TripPattern pattern, RealtimeVehicle vehicle) {}
+  private record TripAndFeedId(Trip trip, String feedId) {}
+
+  private record PatternAndRealtimeVehicle(
+    TripPattern pattern,
+    RealtimeVehicle vehicle,
+    String feedId
+  ) {}
 }

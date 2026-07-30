@@ -8,6 +8,7 @@ import com.google.transit.realtime.GtfsRealtime;
 import com.google.transit.realtime.GtfsRealtime.FeedEntity;
 import com.google.transit.realtime.GtfsRealtime.FeedMessage;
 import com.google.transit.realtime.GtfsRealtime.TripUpdate;
+import com.google.transit.realtime.NyctSubway;
 import de.mfdz.MfdzRealtimeExtensions;
 import java.net.URI;
 import java.util.ArrayList;
@@ -16,6 +17,7 @@ import org.opentripplanner.framework.io.HttpHeaders;
 import org.opentripplanner.framework.io.OtpHttpClient;
 import org.opentripplanner.framework.io.OtpHttpClientFactory;
 import org.opentripplanner.updater.trip.UpdateIncrementality;
+import org.opentripplanner.updater.trip.gtfs.TripReplacementPeriod;
 import org.opentripplanner.utils.tostring.ToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,12 +34,14 @@ class HttpTripUpdateSource {
   private UpdateIncrementality updateIncrementality = FULL_DATASET;
   private final ExtensionRegistry registry = ExtensionRegistry.newInstance();
   private final OtpHttpClient otpHttpClient;
+  private List<TripReplacementPeriod> lastTripReplacementPeriods = List.of();
 
   public HttpTripUpdateSource(PollingTripUpdaterParameters config) {
     this.feedId = config.feedId();
     this.url = config.url();
     this.headers = HttpHeaders.of().acceptProtobuf().add(config.headers()).build();
     MfdzRealtimeExtensions.registerAllExtensions(registry);
+    NyctSubway.registerAllExtensions(registry);
     otpHttpClient = new OtpHttpClientFactory().create(LOG);
   }
 
@@ -46,6 +50,8 @@ class HttpTripUpdateSource {
     List<FeedEntity> feedEntityList;
     List<TripUpdate> updates = null;
     updateIncrementality = FULL_DATASET;
+    lastTripReplacementPeriods = List.of();
+    long startNanos = System.nanoTime();
     try {
       // Decode message
       feedMessage = otpHttpClient.getAndMap(URI.create(url), this.headers, response ->
@@ -65,6 +71,12 @@ class HttpTripUpdateSource {
         updateIncrementality = DIFFERENTIAL;
       }
 
+      if (feedMessage.hasHeader()) {
+        lastTripReplacementPeriods = TripReplacementPeriod.fromNyctFeedHeader(
+          feedMessage.getHeader()
+        );
+      }
+
       // Create List of TripUpdates
       updates = new ArrayList<>(feedEntityList.size());
       for (FeedEntity feedEntity : feedEntityList) {
@@ -72,10 +84,27 @@ class HttpTripUpdateSource {
           updates.add(feedEntity.getTripUpdate());
         }
       }
+
+      LOG.info(
+        "Fetched {} trip updates ({} entities, {} replacement periods) in {} ms from {}",
+        updates.size(),
+        feedEntityList.size(),
+        lastTripReplacementPeriods.size(),
+        (System.nanoTime() - startNanos) / 1_000_000,
+        url
+      );
     } catch (Exception e) {
       LOG.error("Failed to process GTFS-RT TripUpdates feed from {}", url, e);
     }
     return updates;
+  }
+
+  /**
+   * Trip replacement periods extracted from the most recently fetched feed message, or an
+   * empty list if the feed didn't carry the NYCT extension.
+   */
+  public List<TripReplacementPeriod> tripReplacementPeriodsOfLastUpdates() {
+    return lastTripReplacementPeriods;
   }
 
   @Override

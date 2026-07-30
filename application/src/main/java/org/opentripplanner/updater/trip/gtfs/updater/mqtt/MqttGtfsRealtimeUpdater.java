@@ -3,8 +3,10 @@ package org.opentripplanner.updater.trip.gtfs.updater.mqtt;
 import static org.opentripplanner.updater.trip.UpdateIncrementality.DIFFERENTIAL;
 import static org.opentripplanner.updater.trip.UpdateIncrementality.FULL_DATASET;
 
+import com.google.protobuf.ExtensionRegistry;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.transit.realtime.GtfsRealtime;
+import com.google.transit.realtime.NyctSubway;
 import com.hivemq.client.mqtt.datatypes.MqttQos;
 import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedContext;
 import com.hivemq.client.mqtt.mqtt5.Mqtt5AsyncClient;
@@ -27,6 +29,7 @@ import org.opentripplanner.updater.trip.UpdateIncrementality;
 import org.opentripplanner.updater.trip.gtfs.BackwardsDelayPropagationType;
 import org.opentripplanner.updater.trip.gtfs.ForwardsDelayPropagationType;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealTimeTripUpdateAdapter;
+import org.opentripplanner.updater.trip.gtfs.TripReplacementPeriod;
 import org.opentripplanner.updater.trip.gtfs.updater.TripUpdateGraphWriterRunnable;
 import org.opentripplanner.updater.trip.metrics.TripUpdateMetrics;
 import org.opentripplanner.utils.tostring.ToStringBuilder;
@@ -46,7 +49,7 @@ import org.slf4j.LoggerFactory;
  *   "type": "mqtt-gtfs-rt-updater",
  *   "url": "tcp://mqtt.cinfra.fi",
  *   "topic": "gtfsrt/v2/fi/hsl/tu",
- *   "feedId": "HSL",
+ *   "feedIds": ["HSL"],
  *   "fuzzyTripMatching": true
  * }
  * </pre>
@@ -56,7 +59,7 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
   private static final Logger LOG = LoggerFactory.getLogger(MqttGtfsRealtimeUpdater.class);
   private final String url;
   private final String topic;
-  private final String feedId;
+  private final List<String> feedIds;
   private final int qos;
   private final ForwardsDelayPropagationType forwardsDelayPropagationType;
   private final BackwardsDelayPropagationType backwardsDelayPropagationType;
@@ -66,6 +69,9 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
   private WriteToGraphCallback saveResultOnGraph;
 
   private final boolean fuzzyTripMatching;
+  private final boolean partialTripIdMatching;
+
+  private final ExtensionRegistry registry = ExtensionRegistry.newInstance();
 
   private Mqtt5AsyncClient client;
 
@@ -76,14 +82,16 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
     this.configRef = parameters.configRef();
     this.url = parameters.url();
     this.topic = parameters.topic();
-    this.feedId = parameters.feedId();
+    this.feedIds = parameters.feedIds();
     this.qos = parameters.qos();
     this.forwardsDelayPropagationType = parameters.forwardsDelayPropagationType();
     this.backwardsDelayPropagationType = parameters.backwardsDelayPropagationType();
     this.adapter = adapter;
     // Set properties of realtime data snapshot source
     this.fuzzyTripMatching = parameters.fuzzyTripMatching();
+    this.partialTripIdMatching = parameters.partialTripIdMatching();
     this.recordMetrics = TripUpdateMetrics.streaming(parameters);
+    NyctSubway.registerAllExtensions(registry);
     LOG.info("Creating streaming GTFS-RT TripUpdate updater subscribing to MQTT broker at {}", url);
   }
 
@@ -159,11 +167,13 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
 
   private void onMessage(Mqtt5Publish message) {
     List<GtfsRealtime.TripUpdate> updates = null;
+    List<TripReplacementPeriod> tripReplacementPeriods = List.of();
     UpdateIncrementality updateIncrementality = FULL_DATASET;
     try {
       // Decode message
       GtfsRealtime.FeedMessage feedMessage = GtfsRealtime.FeedMessage.parseFrom(
-        message.getPayloadAsBytes()
+        message.getPayloadAsBytes(),
+        registry
       );
       List<GtfsRealtime.FeedEntity> feedEntityList = feedMessage.getEntityList();
 
@@ -177,6 +187,10 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
           .equals(GtfsRealtime.FeedHeader.Incrementality.DIFFERENTIAL)
       ) {
         updateIncrementality = DIFFERENTIAL;
+      }
+
+      if (feedMessage.hasHeader()) {
+        tripReplacementPeriods = TripReplacementPeriod.fromNyctFeedHeader(feedMessage.getHeader());
       }
 
       // Create List of TripUpdates
@@ -196,11 +210,13 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
         new TripUpdateGraphWriterRunnable(
           adapter,
           fuzzyTripMatching,
+          partialTripIdMatching,
           forwardsDelayPropagationType,
           backwardsDelayPropagationType,
           updateIncrementality,
           updates,
-          feedId,
+          tripReplacementPeriods,
+          feedIds,
           recordMetrics
         )
       );
@@ -212,7 +228,7 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
     return ToStringBuilder.of(MqttGtfsRealtimeUpdater.class)
       .addStr("url", url)
       .addStr("topic", topic)
-      .addStr("feedId", feedId)
+      .addCol("feedIds", feedIds)
       .toString();
   }
 }

@@ -42,7 +42,7 @@ public class GtfsRealtimeAlertsUpdater extends PollingGraphUpdater implements Tr
 
     this.updateHandler = new AlertsUpdateHandler(config.fuzzyTripMatching());
     this.updateHandler.setEarlyStart(config.earlyStartSec());
-    this.updateHandler.setFeedId(config.feedId());
+    this.updateHandler.setFeedIds(config.feedIds());
     this.updateHandler.setTransitAlertService(transitAlertService);
     this.otpHttpClient = new OtpHttpClientFactory().create(LOG);
     LOG.info("Creating real-time alert updater running every {}: {}", pollingPeriod(), url);
@@ -74,7 +74,9 @@ public class GtfsRealtimeAlertsUpdater extends PollingGraphUpdater implements Tr
     }
 
     // Handle update in graph writer runnable
-    updateGraph(context -> updateHandler.update(feed, context.gtfsRealtimeFuzzyTripMatcher()));
+    updateGraph(context ->
+      updateHandler.update(feed, context.gtfsRealtimeFuzzyTripMatcher(), context.transitService())
+    );
 
     lastTimestamp = feedTimestamp;
   }

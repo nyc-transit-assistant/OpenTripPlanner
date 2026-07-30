@@ -5,6 +5,7 @@ import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V1
 import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_2;
 import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_3;
 import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_8;
+import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_9;
 
 import java.time.Duration;
 import org.opentripplanner.standalone.config.framework.json.NodeAdapter;
@@ -39,6 +40,17 @@ public class PollingTripUpdaterConfig {
         .summary("If the trips should be matched fuzzily.")
         .asBoolean(false),
       c
+        .of("partialTripIdMatching")
+        .since(V2_9)
+        .summary("Resolve realtime trip ids that are a suffix of the static GTFS trip id.")
+        .description(
+          "Some agencies (notably MTA New York City Subway) emit a realtime `trip_id` that " +
+            "is a suffix of the corresponding static GTFS `trip_id`. When enabled, the realtime " +
+            "id is matched against the static id by suffix, scoped to the same route and " +
+            "service date, before falling back to exact lookup."
+        )
+        .asBoolean(false),
+      c
         .of("forwardsDelayPropagationType")
         .since(V2_8)
         .summary(ForwardsDelayPropagationType.DEFAULT.typeDescription())
@@ -50,7 +62,7 @@ public class PollingTripUpdaterConfig {
         .summary(BackwardsDelayPropagationType.REQUIRED_NO_DATA.typeDescription())
         .description(docEnumValueList(BackwardsDelayPropagationType.values()))
         .asEnum(BackwardsDelayPropagationType.REQUIRED_NO_DATA),
-      c.of("feedId").since(V1_5).summary("Which feed the updates apply to.").asString(),
+      FeedIdsConfig.read(c, V1_5),
       url,
       headers
     );
