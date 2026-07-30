@@ -383,7 +383,14 @@ public class TripImpl implements GraphQLDataFetchers.GraphQLTrip {
   @Override
   public DataFetcher<Geometry> tripGeometry() {
     return environment -> {
-      TripPattern tripPattern = getTripPattern(environment);
+      // Resolve against today's service date. The undated lookup only substitutes realtime
+      // patterns for ADDED trips, so a MODIFIED trip would fall back to its scheduled pattern
+      // and draw the pre-modification path — or nothing, when that pattern carries no shape.
+      var transitService = getTransitService(environment);
+      TripPattern tripPattern = transitService.findPattern(
+        getSource(environment),
+        LocalDate.now(transitService.getTimeZone())
+      );
       if (tripPattern == null) {
         return null;
       }

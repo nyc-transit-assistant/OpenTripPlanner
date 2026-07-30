@@ -26,7 +26,7 @@ public class PollingVehiclePositionUpdater extends PollingGraphUpdater {
   private final GtfsRealtimeHttpVehiclePositionSource vehiclePositionSource;
   private final Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures;
 
-  private final String feedId;
+  private final List<String> feedIds;
   private final RealtimeVehicleRepository realtimeVehicleRepository;
   private final boolean fuzzyTripMatching;
 
@@ -40,7 +40,7 @@ public class PollingVehiclePositionUpdater extends PollingGraphUpdater {
       params.headers()
     );
     this.realtimeVehicleRepository = realtimeVehicleRepository;
-    this.feedId = params.feedId();
+    this.feedIds = params.feedIds();
     this.fuzzyTripMatching = params.fuzzyTripMatching();
     this.vehiclePositionFeatures = params.vehiclePositionFeatures();
 
@@ -64,7 +64,7 @@ public class PollingVehiclePositionUpdater extends PollingGraphUpdater {
     var runnable = new VehiclePositionUpdaterRunnable(
       realtimeVehicleRepository,
       vehiclePositionFeatures,
-      feedId,
+      feedIds,
       fuzzyTripMatching,
       updates
     );

@@ -102,7 +102,7 @@ public class RealtimeVehicleMatcherTest {
 
     // Map positions to trips in feed
     RealtimeVehiclePatternMatcher matcher = new RealtimeVehiclePatternMatcher(
-      TimetableRepositoryForTest.FEED_ID,
+      List.of(TimetableRepositoryForTest.FEED_ID),
       ignored -> trip2,
       ignored -> pattern,
       (id, time) -> pattern,
@@ -142,7 +142,7 @@ public class RealtimeVehicleMatcherTest {
 
     // Map positions to trips in feed
     RealtimeVehiclePatternMatcher matcher = new RealtimeVehiclePatternMatcher(
-      TimetableRepositoryForTest.FEED_ID,
+      List.of(TimetableRepositoryForTest.FEED_ID),
       tripForId::get,
       patternForTrip::get,
       (id, time) -> patternForTrip.get(id),
@@ -200,7 +200,7 @@ public class RealtimeVehicleMatcherTest {
 
     // Map positions to trips in feed
     var matcher = new RealtimeVehiclePatternMatcher(
-      TimetableRepositoryForTest.FEED_ID,
+      List.of(TimetableRepositoryForTest.FEED_ID),
       tripForId::get,
       patternForTrip::get,
       (id, time) -> patternForTrip.get(id),
@@ -249,7 +249,7 @@ public class RealtimeVehicleMatcherTest {
 
     // Map positions to trips in feed
     RealtimeVehiclePatternMatcher matcher = new RealtimeVehiclePatternMatcher(
-      TimetableRepositoryForTest.FEED_ID,
+      List.of(TimetableRepositoryForTest.FEED_ID),
       tripForId::get,
       patternForTrip::get,
       (id, time) -> patternForTrip.get(id),
@@ -310,7 +310,7 @@ public class RealtimeVehicleMatcherTest {
 
     // Map positions to trips in feed
     RealtimeVehiclePatternMatcher matcher = new RealtimeVehiclePatternMatcher(
-      TimetableRepositoryForTest.FEED_ID,
+      List.of(TimetableRepositoryForTest.FEED_ID),
       tripForId::get,
       patternForTrip::get,
       (id, time) -> patternForTrip.get(id),

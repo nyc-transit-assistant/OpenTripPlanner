@@ -22,18 +22,37 @@ information is downloaded in a single HTTP request and polled regularly.
 <!-- real-time-alerts BEGIN -->
 <!-- NOTE! This section is auto-generated. Do not change, change doc in code instead. -->
 
-| Config Parameter          |       Type      | Summary                                                                      |  Req./Opt. | Default Value | Since |
-|---------------------------|:---------------:|------------------------------------------------------------------------------|:----------:|---------------|:-----:|
-| type = "real-time-alerts" |      `enum`     | The type of the updater.                                                     | *Required* |               |  1.5  |
-| earlyStartSec             |    `integer`    | How long before the posted start of an event it should be displayed to users | *Optional* | `0`           |  1.5  |
-| feedId                    |     `string`    | The id of the feed to apply the alerts to.                                   | *Required* |               |  1.5  |
-| frequency                 |    `duration`   | How often the URL should be fetched.                                         | *Optional* | `"PT1M"`      |  1.5  |
-| fuzzyTripMatching         |    `boolean`    | Whether to match trips fuzzily.                                              | *Optional* | `false`       |  1.5  |
-| url                       |     `string`    | URL to fetch the GTFS-RT feed from.                                          | *Required* |               |  1.5  |
-| [headers](#u_0_headers)   | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.   | *Optional* |               |  2.3  |
+| Config Parameter          |       Type      | Summary                                                                       |  Req./Opt. | Default Value | Since |
+|---------------------------|:---------------:|-------------------------------------------------------------------------------|:----------:|---------------|:-----:|
+| type = "real-time-alerts" |      `enum`     | The type of the updater.                                                      | *Required* |               |  1.5  |
+| earlyStartSec             |    `integer`    | How long before the posted start of an event it should be displayed to users  | *Optional* | `0`           |  1.5  |
+| [feedId](#u_0_feedId)     |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to. | *Optional* |               |  1.5  |
+| frequency                 |    `duration`   | How often the URL should be fetched.                                          | *Optional* | `"PT1M"`      |  1.5  |
+| fuzzyTripMatching         |    `boolean`    | Whether to match trips fuzzily.                                               | *Optional* | `false`       |  1.5  |
+| url                       |     `string`    | URL to fetch the GTFS-RT feed from.                                           | *Required* |               |  1.5  |
+| [feedIds](#u_0_feedIds)   |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.             | *Optional* |               |  2.9  |
+| [headers](#u_0_headers)   | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.    | *Optional* |               |  2.3  |
 
 
 ##### Parameter details
+
+<h4 id="u_0_feedId">feedId</h4>
+
+**Since version:** `1.5` ∙ **Type:** `string` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[0] 
+
+Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to.
+
+Equivalent to specifying a one-element `feedIds` list. Retained for backwards compatibility — new configurations should use `feedIds`.
+
+<h4 id="u_0_feedIds">feedIds</h4>
+
+**Since version:** `2.9` ∙ **Type:** `string[]` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[0] 
+
+The static GTFS feed ids the real-time data should be applied to.
+
+A single GTFS-RT feed may be applied to multiple static GTFS feeds; each real-time entity is matched to the static feed that contains its trip/route/stop id.
 
 <h4 id="u_0_headers">headers</h4>
 
@@ -74,16 +93,18 @@ HTTP request and polled regularly.
 <!-- stop-time-updater BEGIN -->
 <!-- NOTE! This section is auto-generated. Do not change, change doc in code instead. -->
 
-| Config Parameter                                                      |       Type      | Summary                                                                    |  Req./Opt. | Default Value        | Since |
-|-----------------------------------------------------------------------|:---------------:|----------------------------------------------------------------------------|:----------:|----------------------|:-----:|
-| type = "stop-time-updater"                                            |      `enum`     | The type of the updater.                                                   | *Required* |                      |  1.5  |
-| [backwardsDelayPropagationType](#u__5__backwardsDelayPropagationType) |      `enum`     | How backwards propagation should be handled.                               | *Optional* | `"required-no-data"` |  2.2  |
-| feedId                                                                |     `string`    | Which feed the updates apply to.                                           | *Required* |                      |  1.5  |
-| [forwardsDelayPropagationType](#u__5__forwardsDelayPropagationType)   |      `enum`     | How forwards propagation should be handled.                                | *Optional* | `"default"`          |  2.8  |
-| frequency                                                             |    `duration`   | How often the data should be downloaded.                                   | *Optional* | `"PT1M"`             |  1.5  |
-| fuzzyTripMatching                                                     |    `boolean`    | If the trips should be matched fuzzily.                                    | *Optional* | `false`              |  1.5  |
-| [url](#u__5__url)                                                     |     `string`    | The URL of the GTFS-RT resource.                                           | *Required* |                      |  1.5  |
-| [headers](#u__5__headers)                                             | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted. | *Optional* |                      |  2.3  |
+| Config Parameter                                                      |       Type      | Summary                                                                       |  Req./Opt. | Default Value        | Since |
+|-----------------------------------------------------------------------|:---------------:|-------------------------------------------------------------------------------|:----------:|----------------------|:-----:|
+| type = "stop-time-updater"                                            |      `enum`     | The type of the updater.                                                      | *Required* |                      |  1.5  |
+| [backwardsDelayPropagationType](#u__5__backwardsDelayPropagationType) |      `enum`     | How backwards propagation should be handled.                                  | *Optional* | `"required-no-data"` |  2.2  |
+| [feedId](#u__5__feedId)                                               |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to. | *Optional* |                      |  1.5  |
+| [forwardsDelayPropagationType](#u__5__forwardsDelayPropagationType)   |      `enum`     | How forwards propagation should be handled.                                   | *Optional* | `"default"`          |  2.8  |
+| frequency                                                             |    `duration`   | How often the data should be downloaded.                                      | *Optional* | `"PT1M"`             |  1.5  |
+| fuzzyTripMatching                                                     |    `boolean`    | If the trips should be matched fuzzily.                                       | *Optional* | `false`              |  1.5  |
+| [partialTripIdMatching](#u__5__partialTripIdMatching)                 |    `boolean`    | Resolve realtime trip ids that are a suffix of the static GTFS trip id.       | *Optional* | `false`              |  2.9  |
+| [url](#u__5__url)                                                     |     `string`    | The URL of the GTFS-RT resource.                                              | *Required* |                      |  1.5  |
+| [feedIds](#u__5__feedIds)                                             |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.             | *Optional* |                      |  2.9  |
+| [headers](#u__5__headers)                                             | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.    | *Optional* |                      |  2.3  |
 
 
 ##### Parameter details
@@ -107,6 +128,15 @@ How backwards propagation should be handled.
        The updated times are exposed through APIs.
 
 
+<h4 id="u__5__feedId">feedId</h4>
+
+**Since version:** `1.5` ∙ **Type:** `string` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[5] 
+
+Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to.
+
+Equivalent to specifying a one-element `feedIds` list. Retained for backwards compatibility — new configurations should use `feedIds`.
+
 <h4 id="u__5__forwardsDelayPropagationType">forwardsDelayPropagationType</h4>
 
 **Since version:** `2.8` ∙ **Type:** `enum` ∙ **Cardinality:** `Optional` ∙ **Default value:** `"default"`   
@@ -129,6 +159,15 @@ How forwards propagation should be handled.
    scheduled and real times from the previous to the next stop.
 
 
+<h4 id="u__5__partialTripIdMatching">partialTripIdMatching</h4>
+
+**Since version:** `2.9` ∙ **Type:** `boolean` ∙ **Cardinality:** `Optional` ∙ **Default value:** `false`   
+**Path:** /updaters/[5] 
+
+Resolve realtime trip ids that are a suffix of the static GTFS trip id.
+
+Some agencies (notably MTA New York City Subway) emit a realtime `trip_id` that is a suffix of the corresponding static GTFS `trip_id`. When enabled, the realtime id is matched against the static id by suffix, scoped to the same route and service date, before falling back to exact lookup.
+
 <h4 id="u__5__url">url</h4>
 
 **Since version:** `1.5` ∙ **Type:** `string` ∙ **Cardinality:** `Required`   
@@ -137,6 +176,15 @@ How forwards propagation should be handled.
 The URL of the GTFS-RT resource.
 
 `file:` URLs are also supported if you want to read a file from the local disk.
+
+<h4 id="u__5__feedIds">feedIds</h4>
+
+**Since version:** `2.9` ∙ **Type:** `string[]` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[5] 
+
+The static GTFS feed ids the real-time data should be applied to.
+
+A single GTFS-RT feed may be applied to multiple static GTFS feeds; each real-time entity is matched to the static feed that contains its trip/route/stop id.
 
 <h4 id="u__5__headers">headers</h4>
 
@@ -181,16 +229,18 @@ This system powers the real-time updates in Helsinki and more information can be
 <!-- mqtt-gtfs-rt-updater BEGIN -->
 <!-- NOTE! This section is auto-generated. Do not change, change doc in code instead. -->
 
-| Config Parameter                                                      |    Type   | Summary                                      |  Req./Opt. | Default Value        | Since |
-|-----------------------------------------------------------------------|:---------:|----------------------------------------------|:----------:|----------------------|:-----:|
-| type = "mqtt-gtfs-rt-updater"                                         |   `enum`  | The type of the updater.                     | *Required* |                      |  1.5  |
-| [backwardsDelayPropagationType](#u__6__backwardsDelayPropagationType) |   `enum`  | How backwards propagation should be handled. | *Optional* | `"required-no-data"` |  2.2  |
-| feedId                                                                |  `string` | The feed id to apply the updates to.         | *Required* |                      |  2.0  |
-| [forwardsDelayPropagationType](#u__6__forwardsDelayPropagationType)   |   `enum`  | How forwards propagation should be handled.  | *Optional* | `"default"`          |  2.8  |
-| fuzzyTripMatching                                                     | `boolean` | Whether to match trips fuzzily.              | *Optional* | `false`              |  2.0  |
-| qos                                                                   | `integer` | QOS level.                                   | *Optional* | `0`                  |  2.0  |
-| topic                                                                 |  `string` | The topic to subscribe to.                   | *Required* |                      |  2.0  |
-| url                                                                   |  `string` | URL of the MQTT broker.                      | *Required* |                      |  2.0  |
+| Config Parameter                                                      |    Type    | Summary                                                                       |  Req./Opt. | Default Value        | Since |
+|-----------------------------------------------------------------------|:----------:|-------------------------------------------------------------------------------|:----------:|----------------------|:-----:|
+| type = "mqtt-gtfs-rt-updater"                                         |   `enum`   | The type of the updater.                                                      | *Required* |                      |  1.5  |
+| [backwardsDelayPropagationType](#u__6__backwardsDelayPropagationType) |   `enum`   | How backwards propagation should be handled.                                  | *Optional* | `"required-no-data"` |  2.2  |
+| [feedId](#u__6__feedId)                                               |  `string`  | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to. | *Optional* |                      |  2.0  |
+| [forwardsDelayPropagationType](#u__6__forwardsDelayPropagationType)   |   `enum`   | How forwards propagation should be handled.                                   | *Optional* | `"default"`          |  2.8  |
+| fuzzyTripMatching                                                     |  `boolean` | Whether to match trips fuzzily.                                               | *Optional* | `false`              |  2.0  |
+| [partialTripIdMatching](#u__6__partialTripIdMatching)                 |  `boolean` | Resolve realtime trip ids that are a suffix of the static GTFS trip id.       | *Optional* | `false`              |  2.9  |
+| qos                                                                   |  `integer` | QOS level.                                                                    | *Optional* | `0`                  |  2.0  |
+| topic                                                                 |  `string`  | The topic to subscribe to.                                                    | *Required* |                      |  2.0  |
+| url                                                                   |  `string`  | URL of the MQTT broker.                                                       | *Required* |                      |  2.0  |
+| [feedIds](#u__6__feedIds)                                             | `string[]` | The static GTFS feed ids the real-time data should be applied to.             | *Optional* |                      |  2.9  |
 
 
 ##### Parameter details
@@ -214,6 +264,15 @@ How backwards propagation should be handled.
        The updated times are exposed through APIs.
 
 
+<h4 id="u__6__feedId">feedId</h4>
+
+**Since version:** `2.0` ∙ **Type:** `string` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[6] 
+
+Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to.
+
+Equivalent to specifying a one-element `feedIds` list. Retained for backwards compatibility — new configurations should use `feedIds`.
+
 <h4 id="u__6__forwardsDelayPropagationType">forwardsDelayPropagationType</h4>
 
 **Since version:** `2.8` ∙ **Type:** `enum` ∙ **Cardinality:** `Optional` ∙ **Default value:** `"default"`   
@@ -235,6 +294,24 @@ How forwards propagation should be handled.
    For `SKIPPED` stops without time given, interpolate the estimated time using the ratio between
    scheduled and real times from the previous to the next stop.
 
+
+<h4 id="u__6__partialTripIdMatching">partialTripIdMatching</h4>
+
+**Since version:** `2.9` ∙ **Type:** `boolean` ∙ **Cardinality:** `Optional` ∙ **Default value:** `false`   
+**Path:** /updaters/[6] 
+
+Resolve realtime trip ids that are a suffix of the static GTFS trip id.
+
+Some agencies (notably MTA New York City Subway) emit a realtime `trip_id` that is a suffix of the corresponding static GTFS `trip_id`. When enabled, the realtime id is matched against the static id by suffix, scoped to the same route and service date, before falling back to exact lookup.
+
+<h4 id="u__6__feedIds">feedIds</h4>
+
+**Since version:** `2.9` ∙ **Type:** `string[]` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[6] 
+
+The static GTFS feed ids the real-time data should be applied to.
+
+A single GTFS-RT feed may be applied to multiple static GTFS feeds; each real-time entity is matched to the static feed that contains its trip/route/stop id.
 
 
 
@@ -266,18 +343,28 @@ in a single HTTP request and polled regularly.
 <!-- vehicle-positions BEGIN -->
 <!-- NOTE! This section is auto-generated. Do not change, change doc in code instead. -->
 
-| Config Parameter            |       Type      | Summary                                                                    |  Req./Opt. | Default Value | Since |
-|-----------------------------|:---------------:|----------------------------------------------------------------------------|:----------:|---------------|:-----:|
-| type = "vehicle-positions"  |      `enum`     | The type of the updater.                                                   | *Required* |               |  1.5  |
-| feedId                      |     `string`    | Feed ID to which the update should be applied.                             | *Required* |               |  2.2  |
-| frequency                   |    `duration`   | How often the positions should be updated.                                 | *Optional* | `"PT1M"`      |  2.2  |
-| fuzzyTripMatching           |    `boolean`    | Whether to match trips fuzzily.                                            | *Optional* | `false`       |  2.5  |
-| url                         |      `uri`      | The URL of GTFS-RT protobuf HTTP resource to download the positions from.  | *Required* |               |  2.2  |
-| [features](#u__7__features) |    `enum set`   | Which features of GTFS RT vehicle positions should be loaded into OTP.     | *Optional* |               |  2.5  |
-| [headers](#u__7__headers)   | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted. | *Optional* |               |  2.3  |
+| Config Parameter            |       Type      | Summary                                                                       |  Req./Opt. | Default Value | Since |
+|-----------------------------|:---------------:|-------------------------------------------------------------------------------|:----------:|---------------|:-----:|
+| type = "vehicle-positions"  |      `enum`     | The type of the updater.                                                      | *Required* |               |  1.5  |
+| [feedId](#u__7__feedId)     |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to. | *Optional* |               |  2.2  |
+| frequency                   |    `duration`   | How often the positions should be updated.                                    | *Optional* | `"PT1M"`      |  2.2  |
+| fuzzyTripMatching           |    `boolean`    | Whether to match trips fuzzily.                                               | *Optional* | `false`       |  2.5  |
+| url                         |      `uri`      | The URL of GTFS-RT protobuf HTTP resource to download the positions from.     | *Required* |               |  2.2  |
+| [features](#u__7__features) |    `enum set`   | Which features of GTFS RT vehicle positions should be loaded into OTP.        | *Optional* |               |  2.5  |
+| [feedIds](#u__7__feedIds)   |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.             | *Optional* |               |  2.9  |
+| [headers](#u__7__headers)   | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.    | *Optional* |               |  2.3  |
 
 
 ##### Parameter details
+
+<h4 id="u__7__feedId">feedId</h4>
+
+**Since version:** `2.2` ∙ **Type:** `string` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[7] 
+
+Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to.
+
+Equivalent to specifying a one-element `feedIds` list. Retained for backwards compatibility — new configurations should use `feedIds`.
 
 <h4 id="u__7__features">features</h4>
 
@@ -286,6 +373,15 @@ in a single HTTP request and polled regularly.
 **Enum values:** `position` | `stop-position` | `occupancy`
 
 Which features of GTFS RT vehicle positions should be loaded into OTP.
+
+<h4 id="u__7__feedIds">feedIds</h4>
+
+**Since version:** `2.9` ∙ **Type:** `string[]` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[7] 
+
+The static GTFS feed ids the real-time data should be applied to.
+
+A single GTFS-RT feed may be applied to multiple static GTFS feeds; each real-time entity is matched to the static feed that contains its trip/route/stop id.
 
 <h4 id="u__7__headers">headers</h4>
 

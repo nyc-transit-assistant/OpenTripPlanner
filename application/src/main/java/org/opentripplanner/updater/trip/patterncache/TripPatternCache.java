@@ -41,8 +41,24 @@ public class TripPatternCache {
 
   private final TripPatternIdGenerator tripPatternIdGenerator;
 
+  /**
+   * Optional: when set, brand-new patterns for ADDED trips reuse hop geometries from
+   * existing static patterns on the same route. When null, the new pattern has no stored
+   * geometry and the API falls back to straight stop-to-stop lines.
+   */
+  @Nullable
+  private final AddedTripHopGeometryResolver hopGeometryResolver;
+
   public TripPatternCache(TripPatternIdGenerator tripPatternIdGenerator) {
+    this(tripPatternIdGenerator, null);
+  }
+
+  public TripPatternCache(
+    TripPatternIdGenerator tripPatternIdGenerator,
+    @Nullable AddedTripHopGeometryResolver hopGeometryResolver
+  ) {
     this.tripPatternIdGenerator = tripPatternIdGenerator;
+    this.hopGeometryResolver = hopGeometryResolver;
   }
 
   /**
@@ -78,14 +94,27 @@ public class TripPatternCache {
     // Create TripPattern if it doesn't exist yet
     if (tripPattern == null) {
       var id = tripPatternIdGenerator.generateUniqueTripPatternId(trip);
-      tripPattern = TripPattern.of(id)
+      var builder = TripPattern.of(id)
         .withRoute(trip.getRoute())
         .withMode(trip.getMode())
         .withNetexSubmode(trip.getNetexSubMode())
         .withStopPattern(stopPattern)
         .withRealTimeStopPatternModified()
-        .withOriginalTripPattern(originalTripPattern)
-        .build();
+        .withOriginalTripPattern(originalTripPattern);
+
+      // Reuse hop geometries from existing patterns so the resulting polyline tracks real
+      // alignments instead of straight stop-to-stop lines. This is needed when there is no
+      // original pattern to inherit from (ADDED trips) and also when there is one but it
+      // carries no shape — inheriting from it would just yield straight lines.
+      boolean originalHasShape =
+        originalTripPattern != null && originalTripPattern.getGeometry() != null;
+      if (!originalHasShape && hopGeometryResolver != null) {
+        hopGeometryResolver
+          .resolve(stopPattern, trip.getRoute())
+          .ifPresent(builder::withHopGeometries);
+      }
+
+      tripPattern = builder.build();
 
       // Add pattern to cache
       cache.put(stopPattern, tripPattern);

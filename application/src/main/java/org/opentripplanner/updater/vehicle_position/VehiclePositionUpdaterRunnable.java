@@ -13,19 +13,22 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
 
   private final List<VehiclePosition> updates;
   private final RealtimeVehicleRepository realtimeVehicleRepository;
-  private final String feedId;
+  private final List<String> feedIds;
   private final boolean fuzzyTripMatching;
   private final Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures;
 
   public VehiclePositionUpdaterRunnable(
     RealtimeVehicleRepository realtimeVehicleRepository,
     Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures,
-    String feedId,
+    List<String> feedIds,
     boolean fuzzyTripMatching,
     List<VehiclePosition> updates
   ) {
     this.updates = Objects.requireNonNull(updates);
-    this.feedId = feedId;
+    this.feedIds = List.copyOf(Objects.requireNonNull(feedIds));
+    if (this.feedIds.isEmpty()) {
+      throw new IllegalArgumentException("feedIds must contain at least one feedId");
+    }
     this.realtimeVehicleRepository = realtimeVehicleRepository;
     this.fuzzyTripMatching = fuzzyTripMatching;
     this.vehiclePositionFeatures = vehiclePositionFeatures;
@@ -34,7 +37,7 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
   @Override
   public void run(RealTimeUpdateContext context) {
     RealtimeVehiclePatternMatcher matcher = new RealtimeVehiclePatternMatcher(
-      feedId,
+      feedIds,
       context.transitService()::getTrip,
       context.transitService()::findPattern,
       context.transitService()::findPattern,

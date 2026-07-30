@@ -269,6 +269,58 @@ class AddedTest implements RealtimeTestConstants {
     assertEquals(TimeUtils.time("01:25"), tripTimes.getArrivalTime(2));
   }
 
+  /**
+   * NYCT terminal-stop case: only {@code arrival} is present, carrying both {@code time} and
+   * {@code delay}. The mirror logic must copy the realtime arrival time onto the missing
+   * departure side; otherwise the fallback {@code delay=0} is applied against the (mirrored)
+   * scheduled departure, leaving RT departure < RT arrival → NEGATIVE_DWELL_TIME.
+   */
+  @Test
+  void addedTripWithArrivalTimeAndDelayMirrorsRealtimeDeparture() {
+    var tripUpdate = gtfsRt
+      .tripUpdate(ADDED_TRIP_ID, ADDED)
+      .addStopTime(STOP_A_ID, "00:30")
+      .addStopTime(STOP_B_ID, "00:40")
+      .addStopTimeWithArrivalTimeAndDelay(STOP_C_ID, "00:55", 40)
+      .build();
+
+    assertSuccess(gtfsRt.applyTripUpdate(tripUpdate));
+
+    var fetched = env.tripData(ADDED_TRIP_ID);
+    var times = fetched.tripTimes();
+    assertNotNull(times);
+    // The realtime arrival explicitly set to 00:55; the mirror copies that onto the realtime
+    // departure so dwell is exactly 0 (not negative).
+    assertEquals(TimeUtils.time("00:55"), times.getArrivalTime(2));
+    assertEquals(TimeUtils.time("00:55"), times.getDepartureTime(2));
+  }
+
+  /**
+   * GTFS-RT permits sending only arrival or only departure on a StopTimeUpdate. NYCT terminal
+   * stops do this routinely (origin has only departure; destination has only arrival).
+   * The synthesizer mirrors the missing field so the trip doesn't fail NEGATIVE_DWELL_TIME
+   * validation due to a default-zero departure (or arrival).
+   */
+  @Test
+  void addedTripWithMissingArrivalOrDepartureMirrorsTheOther() {
+    var tripUpdate = gtfsRt
+      .tripUpdate(ADDED_TRIP_ID, ADDED)
+      .addStopTimeWithArrivalAndDeparture(STOP_A_ID, null, "00:30")
+      .addStopTimeWithArrivalAndDeparture(STOP_B_ID, "00:40", "00:40")
+      .addStopTimeWithArrivalAndDeparture(STOP_C_ID, "00:55", null)
+      .build();
+
+    assertSuccess(gtfsRt.applyTripUpdate(tripUpdate));
+
+    var fetched = env.tripData(ADDED_TRIP_ID);
+    var times = fetched.tripTimes();
+    assertNotNull(times);
+    assertEquals(TimeUtils.time("00:30"), times.getArrivalTime(0));
+    assertEquals(TimeUtils.time("00:30"), times.getDepartureTime(0));
+    assertEquals(TimeUtils.time("00:55"), times.getArrivalTime(2));
+    assertEquals(TimeUtils.time("00:55"), times.getDepartureTime(2));
+  }
+
   @Test
   void multipleAddedTripsInSingleBatch() {
     var update1 = gtfsRt

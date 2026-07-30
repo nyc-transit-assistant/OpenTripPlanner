@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.opentripplanner.framework.io.HttpHeaders;
 import org.opentripplanner.test.support.ResourceLoader;
@@ -19,9 +20,10 @@ public class GtfsRealtimeTripUpdateSourceTest {
         "rt",
         Duration.ofSeconds(10),
         false,
+        false,
         ForwardsDelayPropagationType.DEFAULT,
         BackwardsDelayPropagationType.ALWAYS,
-        "rt",
+        List.of("rt"),
         ResourceLoader.of(this).url("septa.pbf").toString(),
         HttpHeaders.empty()
       )

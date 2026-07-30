@@ -461,15 +461,29 @@ public class TimetableSnapshot implements ReadOnlyTimetableSnapshot, MutableTime
    * @param feedId feed id to clear the snapshot for
    */
   public void clear(String feedId) {
+    clear(feedId, null);
+  }
+
+  /**
+   * Clear data of the snapshot for the provided feed id, optionally restricted to a subset of
+   * routes. This supports the case where multiple realtime updaters share a feed id but each
+   * is authoritative only for a subset of routes (e.g. NYCT's per-line GTFS-RT URLs all writing
+   * to {@code mta-subway}). Without scoping, each updater's full-dataset clear would wipe data
+   * just produced by the others.
+   *
+   * @param feedId feed id to clear the snapshot for
+   * @param routeIds if non-null, only clear data whose route is in this set; if null, clear all
+   *                 data for the feed (matches {@link #clear(String)})
+   */
+  public void clear(String feedId, @Nullable java.util.Set<FeedScopedId> routeIds) {
     validateNotReadOnly();
-    // Clear all data from snapshot.
-    boolean timetablesWereCleared = clearTimetables(feedId);
+    boolean timetablesWereCleared = clearTimetables(feedId, routeIds);
     boolean newTripPatternsForModifiedTripsWereCleared = clearNewTripPatternsForModifiedTrips(
-      feedId
+      feedId,
+      routeIds
     );
-    boolean addedTripPatternsWereCleared = clearEntriesForRealtimeAddedTrips(feedId);
-    boolean patternsForStopWereCleared = clearPatternsForStop(feedId);
-    // If this snapshot was modified, it will be dirty after the clear actions.
+    boolean addedTripPatternsWereCleared = clearEntriesForRealtimeAddedTrips(feedId, routeIds);
+    boolean patternsForStopWereCleared = clearPatternsForStop(feedId, routeIds);
     if (
       timetablesWereCleared ||
       newTripPatternsForModifiedTripsWereCleared ||
@@ -627,16 +641,17 @@ public class TimetableSnapshot implements ReadOnlyTimetableSnapshot, MutableTime
   }
 
   /**
-   * Clear timetable for all patterns matching the provided feed id.
+   * Clear timetable for all patterns matching the provided feed id (and, if routeIds is non-null,
+   * also restricted to patterns whose route is in routeIds).
    *
-   * @param feedId feed id to clear out
    * @return true if the timetable changed as a result of the call
    */
-  private boolean clearTimetables(String feedId) {
+  private boolean clearTimetables(String feedId, @Nullable java.util.Set<FeedScopedId> routeIds) {
     var entriesToBeRemoved = timetables
       .entrySet()
       .stream()
       .filter(entry -> feedId.equals(entry.getKey().getFeedId()))
+      .filter(entry -> matchesRouteFilter(routeIds, entry.getValue()))
       .collect(Collectors.toSet());
     for (var entry : entriesToBeRemoved) {
       SortedSet<Timetable> timetablesOfPattern = entry.getValue();
@@ -654,53 +669,118 @@ public class TimetableSnapshot implements ReadOnlyTimetableSnapshot, MutableTime
     return timetables.entrySet().removeAll(entriesToBeRemoved);
   }
 
-  /**
-   * Clear new trip patterns for modified trips matching the provided feed id.
-   *
-   * @param feedId feed id to clear out
-   * @return true if the newTripPatternForModifiedTrip changed as a result of the call
-   */
-  private boolean clearNewTripPatternsForModifiedTrips(String feedId) {
-    return realTimeNewTripPatternsForModifiedTrips
-      .keySet()
-      .removeIf(tripIdAndServiceDate -> feedId.equals(tripIdAndServiceDate.tripId().getFeedId()));
+  private static boolean matchesRouteFilter(
+    @Nullable java.util.Set<FeedScopedId> routeIds,
+    SortedSet<Timetable> timetablesOfPattern
+  ) {
+    if (routeIds == null) {
+      return true;
+    }
+    if (timetablesOfPattern.isEmpty()) {
+      return false;
+    }
+    var pattern = timetablesOfPattern.first().getPattern();
+    return pattern != null && routeIds.contains(pattern.getRoute().getId());
   }
 
   /**
-   * Clear all realtime added routes, trip patterns and trips matching the provided feed id.
-   *
-   * @param feedId feed id to clear out
-   * @return true if realTimeAddedTrips changed as a result of the call
+   * Clear new trip patterns for modified trips. Restricted to feedId, and optionally to routeIds.
    */
-  private boolean clearEntriesForRealtimeAddedTrips(String feedId) {
-    // it is sufficient to test for the removal of added trips, since other indexed entities are
-    // added only if a new trip is added.
-    boolean removedEntry = realTimeAddedTrips
-      .keySet()
-      .removeIf(id -> feedId.equals(id.getFeedId()));
-    realTimeAddedPatternForTrip.keySet().removeIf(trip -> feedId.equals(trip.getId().getFeedId()));
+  private boolean clearNewTripPatternsForModifiedTrips(
+    String feedId,
+    @Nullable java.util.Set<FeedScopedId> routeIds
+  ) {
+    return realTimeNewTripPatternsForModifiedTrips
+      .entrySet()
+      .removeIf(e -> {
+        var tripIdAndServiceDate = e.getKey();
+        if (!feedId.equals(tripIdAndServiceDate.tripId().getFeedId())) {
+          return false;
+        }
+        return routeIds == null || routeIds.contains(e.getValue().getRoute().getId());
+      });
+  }
+
+  /**
+   * Clear realtime added routes, trip patterns and trips. Restricted to feedId, and optionally to
+   * routeIds. With null routeIds this is equivalent to the original feed-wide clear.
+   */
+  private boolean clearEntriesForRealtimeAddedTrips(
+    String feedId,
+    @Nullable java.util.Set<FeedScopedId> routeIds
+  ) {
+    if (routeIds == null) {
+      // Original behavior: remove every entry whose feed matches.
+      boolean removedEntry = realTimeAddedTrips
+        .keySet()
+        .removeIf(id -> feedId.equals(id.getFeedId()));
+      realTimeAddedPatternForTrip
+        .keySet()
+        .removeIf(trip -> feedId.equals(trip.getId().getFeedId()));
+      realTimeAddedTripOnServiceDateForTripAndDay
+        .keySet()
+        .removeIf(tripIdAndServiceDate -> feedId.equals(tripIdAndServiceDate.tripId().getFeedId()));
+      realTimeAddedTripOnServiceDateById.keySet().removeIf(id -> feedId.equals(id.getFeedId()));
+      realTimeAddedPatternsForRoute
+        .keySet()
+        .removeIf(route -> feedId.equals(route.getId().getFeedId()));
+      realtimeAddedRoutes.keySet().removeIf(id -> feedId.equals(id.getFeedId()));
+      realTimeAddedReplacedByTripOnServiceDateById
+        .keySet()
+        .removeIf(id -> feedId.equals(id.getFeedId()));
+      return removedEntry;
+    }
+    // Scoped: only remove entries whose route is in the set.
+    var tripIdsToRemove = realTimeAddedTrips
+      .entrySet()
+      .stream()
+      .filter(e -> feedId.equals(e.getKey().getFeedId()))
+      .filter(e -> e.getValue().getRoute() != null)
+      .filter(e -> routeIds.contains(e.getValue().getRoute().getId()))
+      .map(Map.Entry::getKey)
+      .collect(Collectors.toSet());
+    boolean removedEntry = realTimeAddedTrips.keySet().removeAll(tripIdsToRemove);
+    realTimeAddedPatternForTrip.keySet().removeIf(trip -> tripIdsToRemove.contains(trip.getId()));
     realTimeAddedTripOnServiceDateForTripAndDay
       .keySet()
-      .removeIf(tripIdAndServiceDate -> feedId.equals(tripIdAndServiceDate.tripId().getFeedId()));
-    realTimeAddedTripOnServiceDateById.keySet().removeIf(id -> feedId.equals(id.getFeedId()));
+      .removeIf(tripIdAndServiceDate -> tripIdsToRemove.contains(tripIdAndServiceDate.tripId()));
+    realTimeAddedTripOnServiceDateById
+      .entrySet()
+      .removeIf(
+        e ->
+          feedId.equals(e.getKey().getFeedId()) &&
+          e.getValue().getTrip() != null &&
+          tripIdsToRemove.contains(e.getValue().getTrip().getId())
+      );
     realTimeAddedPatternsForRoute
       .keySet()
-      .removeIf(route -> feedId.equals(route.getId().getFeedId()));
-    realtimeAddedRoutes.keySet().removeIf(id -> feedId.equals(id.getFeedId()));
+      .removeIf(
+        route -> feedId.equals(route.getId().getFeedId()) && routeIds.contains(route.getId())
+      );
+    realtimeAddedRoutes
+      .keySet()
+      .removeIf(id -> feedId.equals(id.getFeedId()) && routeIds.contains(id));
     realTimeAddedReplacedByTripOnServiceDateById
       .keySet()
-      .removeIf(id -> feedId.equals(id.getFeedId()));
+      .removeIf(id -> feedId.equals(id.getFeedId()) && tripIdsToRemove.contains(id));
     return removedEntry;
   }
 
   /**
-   * Clear all trip patterns from patternsForStop matching the provided feed id.
-   *
-   * @param feedId feed id to clear out
-   * @return true if patternsForStop changed as a result of the call
+   * Clear trip patterns from patternsForStop. Restricted to feedId, and optionally to routeIds.
    */
-  private boolean clearPatternsForStop(String feedId) {
-    return patternsForStop.values().removeIf(tripPattern -> feedId.equals(tripPattern.getFeedId()));
+  private boolean clearPatternsForStop(
+    String feedId,
+    @Nullable java.util.Set<FeedScopedId> routeIds
+  ) {
+    return patternsForStop
+      .values()
+      .removeIf(tripPattern -> {
+        if (!feedId.equals(tripPattern.getFeedId())) {
+          return false;
+        }
+        return routeIds == null || routeIds.contains(tripPattern.getRoute().getId());
+      });
   }
 
   /**

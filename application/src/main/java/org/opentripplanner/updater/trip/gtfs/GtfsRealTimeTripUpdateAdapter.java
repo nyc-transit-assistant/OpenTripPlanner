@@ -1,5 +1,6 @@
 package org.opentripplanner.updater.trip.gtfs;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.function.Supplier;
 import org.opentripplanner.core.framework.deduplicator.DeduplicatorService;
@@ -7,6 +8,7 @@ import org.opentripplanner.transit.repository.MutableTimetableSnapshot;
 import org.opentripplanner.transit.service.DefaultTransitService;
 import org.opentripplanner.transit.service.TimetableRepository;
 import org.opentripplanner.transit.service.TransitEditorService;
+import org.opentripplanner.updater.trip.patterncache.AddedTripHopGeometryResolver;
 import org.opentripplanner.updater.trip.patterncache.TripPatternCache;
 import org.opentripplanner.updater.trip.patterncache.TripPatternIdGenerator;
 
@@ -18,21 +20,40 @@ public class GtfsRealTimeTripUpdateAdapter {
 
   private final TimetableRepository timetableRepository;
   private final Supplier<LocalDate> localDateNow;
+  private final Supplier<Instant> instantNow;
   private final TripPatternCache tripPatternCache;
   private final TripTimesUpdater tripTimesUpdater;
   private final DeduplicatorService deduplicator;
 
-  /**
-   * Constructor to allow tests to provide their own clock, not using system time.
-   */
   public GtfsRealTimeTripUpdateAdapter(
     TimetableRepository timetableRepository,
     DeduplicatorService deduplicator,
     Supplier<LocalDate> localDateNow
   ) {
+    this(timetableRepository, deduplicator, localDateNow, Instant::now);
+  }
+
+  /**
+   * Constructor to allow tests to provide their own clock, not using system time. The
+   * {@code instantNow} supplier should normally be consistent with {@code localDateNow}.
+   */
+  public GtfsRealTimeTripUpdateAdapter(
+    TimetableRepository timetableRepository,
+    DeduplicatorService deduplicator,
+    Supplier<LocalDate> localDateNow,
+    Supplier<Instant> instantNow
+  ) {
     this.timetableRepository = timetableRepository;
     this.localDateNow = localDateNow;
-    this.tripPatternCache = new TripPatternCache(new TripPatternIdGenerator());
+    this.instantNow = instantNow;
+    // The resolver reuses hop geometries from static scheduled patterns, so a transit service
+    // over the repository (without a realtime buffer) is a sufficient source.
+    var staticTransitService = new DefaultTransitService(timetableRepository);
+    var hopGeometryResolver = new AddedTripHopGeometryResolver(
+      staticTransitService::findPatterns,
+      stop -> staticTransitService.findPatterns(stop)
+    );
+    this.tripPatternCache = new TripPatternCache(new TripPatternIdGenerator(), hopGeometryResolver);
     this.tripTimesUpdater = new TripTimesUpdater(timetableRepository.getTimeZone(), deduplicator);
     this.deduplicator = deduplicator;
   }
@@ -47,7 +68,9 @@ public class GtfsRealTimeTripUpdateAdapter {
     var editorService = new DefaultTransitService(timetableRepository, buffer);
     return new GtfsRealTimeUpdateHandler(
       buffer,
+      editorService,
       localDateNow,
+      instantNow,
       new ScheduledTripHandler(editorService, buffer, tripTimesUpdater, tripPatternCache),
       new NewTripHandler(editorService, buffer, tripTimesUpdater, tripPatternCache),
       new CanceledTripHandler(editorService, buffer),

@@ -4,26 +4,33 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.MultimapBuilder;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.Nullable;
+import org.locationtech.jts.geom.LineString;
 import org.opentripplanner.core.framework.deduplicator.DeduplicatorService;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.ext.flex.trip.FlexTrip;
 import org.opentripplanner.graph_builder.issue.api.DataImportIssueStore;
+import org.opentripplanner.graph_builder.issues.SynthesizedHopGeometry;
 import org.opentripplanner.graph_builder.issues.TripDegenerate;
 import org.opentripplanner.graph_builder.issues.TripUndefinedService;
 import org.opentripplanner.graph_builder.module.geometry.GeometryProcessor;
 import org.opentripplanner.model.Frequency;
 import org.opentripplanner.model.StopTime;
 import org.opentripplanner.model.impl.TransitDataImportBuilder;
+import org.opentripplanner.transit.geometry.HopGeometryIndex;
 import org.opentripplanner.transit.model.framework.DataValidationException;
 import org.opentripplanner.transit.model.network.Route;
 import org.opentripplanner.transit.model.network.StopPattern;
 import org.opentripplanner.transit.model.network.TripPattern;
 import org.opentripplanner.transit.model.network.TripPatternBuilder;
+import org.opentripplanner.transit.model.site.StopLocation;
 import org.opentripplanner.transit.model.timetable.Direction;
 import org.opentripplanner.transit.model.timetable.FrequencyEntry;
 import org.opentripplanner.transit.model.timetable.ScheduledTripTimes;
@@ -53,6 +60,13 @@ public class GenerateTripPatternsOperation {
   private final Multimap<StopPattern, TripPatternBuilder> tripPatternBuilders =
     MultimapBuilder.linkedHashKeys().linkedHashSetValues().build();
   private final ListMultimap<Trip, Frequency> frequenciesForTrip = ArrayListMultimap.create();
+
+  /**
+   * Hop geometries of every pattern that has a shape, kept so that patterns without one can
+   * borrow from them once all patterns are known. Absence of a key means "no shape".
+   */
+  private final Map<TripPatternBuilder, List<LineString>> hopGeometriesByPattern =
+    new IdentityHashMap<>();
 
   private int freqCount = 0;
   private int scheduledCount = 0;
@@ -88,6 +102,8 @@ public class GenerateTripPatternsOperation {
         issueStore.add(e.error());
       }
     }
+
+    fillInMissingHopGeometries();
 
     tripPatternBuilders
       .values()
@@ -179,6 +195,12 @@ public class GenerateTripPatternsOperation {
         tripPatternBuilder.getMode().equals(trip.getMode()) &&
         tripPatternBuilder.getNetexSubmode().equals(trip.getNetexSubMode())
       ) {
+        // A pattern takes its geometry from whichever of its trips is seen first, so it can end
+        // up with none even though a later trip on the very same stop pattern carries a shape.
+        // Take the first shape offered rather than the first trip's.
+        if (!hopGeometriesByPattern.containsKey(tripPatternBuilder)) {
+          recordHopGeometries(tripPatternBuilder, geometryProcessor.createHopGeometries(trip));
+        }
         return tripPatternBuilder;
       }
     }
@@ -187,10 +209,104 @@ public class GenerateTripPatternsOperation {
       .withRoute(route)
       .withStopPattern(stopPattern)
       .withMode(trip.getMode())
-      .withNetexSubmode(trip.getNetexSubMode())
-      .withHopGeometries(geometryProcessor.createHopGeometries(trip));
+      .withNetexSubmode(trip.getNetexSubMode());
+    recordHopGeometries(tripPatternBuilder, geometryProcessor.createHopGeometries(trip));
     tripPatternBuilders.put(stopPattern, tripPatternBuilder);
     return tripPatternBuilder;
+  }
+
+  /** Set the geometries on the builder and remember them as a source for patterns that lack any. */
+  private void recordHopGeometries(
+    TripPatternBuilder tripPatternBuilder,
+    @Nullable List<LineString> hopGeometries
+  ) {
+    tripPatternBuilder.withHopGeometries(hopGeometries);
+    if (hopGeometries != null) {
+      hopGeometriesByPattern.put(tripPatternBuilder, hopGeometries);
+    }
+  }
+
+  /**
+   * Give patterns whose trips carry no {@code shape_id} the geometry of other patterns covering
+   * the same trackage. Runs once every pattern is known, since a pattern can only borrow from
+   * sequences that have already been read.
+   *
+   * @see HopGeometryIndex
+   */
+  private void fillInMissingHopGeometries() {
+    var shapeless = tripPatternBuilders
+      .values()
+      .stream()
+      .filter(b -> !hopGeometriesByPattern.containsKey(b))
+      .filter(b -> b.getStopPattern().getSize() > 1)
+      .toList();
+    if (shapeless.isEmpty()) {
+      return;
+    }
+
+    var index = new HopGeometryIndex();
+    hopGeometriesByPattern.forEach((builder, geometries) ->
+      index.add(stopsOf(builder.getStopPattern()), geometries)
+    );
+    if (index.isEmpty()) {
+      LOG.info(
+        "{} trip patterns have no shape and there is no geometry to borrow.",
+        shapeless.size()
+      );
+      return;
+    }
+
+    int filled = 0;
+    int adjacent = 0;
+    int stitched = 0;
+    int reversed = 0;
+    int straight = 0;
+    int unresolved = 0;
+    for (var builder : shapeless) {
+      var stopPattern = builder.getStopPattern();
+      var resolution = index.resolve(stopsOf(stopPattern));
+      if (!resolution.hasAny()) {
+        unresolved++;
+        continue;
+      }
+      builder.withHopGeometries(resolution.geometries());
+      filled++;
+      adjacent += resolution.adjacent();
+      stitched += resolution.stitched();
+      reversed += resolution.reversed();
+      straight += resolution.straight();
+      if (resolution.approximated() > 0 || resolution.straight() > 0) {
+        issueStore.add(
+          new SynthesizedHopGeometry(
+            builder.getRoute().getId(),
+            stopPattern.getStop(0).getId(),
+            stopPattern.getStop(stopPattern.getSize() - 1).getId(),
+            resolution.stitched(),
+            resolution.reversed(),
+            resolution.straight()
+          )
+        );
+      }
+    }
+    LOG.info(
+      "Synthesized geometry for {} of {} trip patterns without a shape ({} unresolved). " +
+        "Hops: {} adjacent, {} stitched, {} reversed, {} left straight.",
+      filled,
+      shapeless.size(),
+      unresolved,
+      adjacent,
+      stitched,
+      reversed,
+      straight
+    );
+  }
+
+  private static List<StopLocation> stopsOf(StopPattern stopPattern) {
+    var stops = new ArrayList<StopLocation>(stopPattern.getSize());
+    for (int i = 0; i < stopPattern.getSize(); i++) {
+      stops.add(stopPattern.getStop(i));
+    }
+    return stops;
   }
 
   /**

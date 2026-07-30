@@ -1,0 +1,37 @@
+// NYC Transit Subway extensions to GTFS-realtime, as documented in the
+// MTA "GTFS-realtime Reference for the New York City Subway" v1.1.
+//
+// Only the FeedHeader extension carrying trip_replacement_period is defined
+// here — the per-trip and per-stop-time NYCT extensions (is_assigned, train_id,
+// scheduled_track, actual_track) can be added later if/when OTP needs them.
+
+syntax = "proto2";
+
+import "gtfs-realtime.proto";
+
+option java_package = "com.google.transit.realtime";
+package transit_realtime;
+
+message NyctFeedHeader {
+  // Version of the NYCT subway extensions. Currently "1.0".
+  required string nyct_subway_version = 1;
+
+  // One TripReplacementPeriod per route covered by the feed. Within each
+  // period the realtime feed is the authoritative source for that route, and
+  // any scheduled trip not present in the feed should be treated as cancelled.
+  repeated TripReplacementPeriod trip_replacement_period = 2;
+}
+
+message TripReplacementPeriod {
+  // Route the replacement period applies to.
+  optional string route_id = 1;
+
+  // Window during which the realtime feed replaces the static schedule.
+  // Per the NYCT spec the start time is omitted and the end time is now + 30
+  // minutes for all currently-implemented routes.
+  optional TimeRange replacement_period = 2;
+}
+
+extend FeedHeader {
+  optional NyctFeedHeader nyct_feed_header = 1001;
+}

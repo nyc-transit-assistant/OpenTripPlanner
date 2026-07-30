@@ -1,8 +1,10 @@
 package org.opentripplanner.updater.trip.gtfs.moduletests.rejection;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.opentripplanner.updater.spi.UpdateErrorType.INVALID_STOP_REFERENCE;
 import static org.opentripplanner.updater.spi.UpdateErrorType.INVALID_STOP_SEQUENCE;
 import static org.opentripplanner.updater.spi.UpdateResultAssertions.assertFailure;
+import static org.opentripplanner.updater.spi.UpdateResultAssertions.assertSuccess;
 
 import com.google.transit.realtime.GtfsRealtime.TripUpdate.StopTimeEvent;
 import com.google.transit.realtime.GtfsRealtime.TripUpdate.StopTimeUpdate;
@@ -51,6 +53,65 @@ class InvalidStopRefTest implements RealtimeTestConstants {
     var rt = GtfsRtTestHelper.of(env);
     var update = rt.tripUpdateScheduled(TRIP_1_ID).addDelayedStopTime(100, 60).build();
     assertFailure(INVALID_STOP_SEQUENCE, rt.applyTripUpdate(update));
+  }
+
+  /**
+   * NYCT's L feed reports stop_sequence as 0-indexed while the static schedule is 1-indexed,
+   * so a strict sequence lookup fails. When the update also carries a stop_id we fall back to
+   * it instead of rejecting the update.
+   */
+  @Test
+  void invalidStopSequenceFallsBackToStopId() {
+    var env = builder.addTrip(tripInput).build();
+    var rt = GtfsRtTestHelper.of(env);
+    var update = rt
+      .tripUpdateScheduled(TRIP_1_ID)
+      .addRawStopTime(
+        StopTimeUpdate.newBuilder()
+          .setStopSequence(999)
+          .setStopId(STOP_A_ID)
+          .setDeparture(StopTimeEvent.newBuilder().setDelay(60))
+          .build()
+      )
+      .addRawStopTime(
+        StopTimeUpdate.newBuilder()
+          .setStopSequence(1000)
+          .setStopId(STOP_B_ID)
+          .setDeparture(StopTimeEvent.newBuilder().setDelay(60))
+          .build()
+      )
+      .build();
+
+    assertSuccess(rt.applyTripUpdate(update));
+  }
+
+  /**
+   * NYCT's L feed reports stop_sequence as 0-indexed while the static schedule is 1-indexed,
+   * so seq=N silently lands on the *next* stop in the pattern (static seq=N) when looked up
+   * strictly. When the update also carries a stop_id that disagrees with the sequence-resolved
+   * position, the stop_id is authoritative — otherwise A's explicit delay would silently land
+   * on B and A would stay [ND].
+   */
+  @Test
+  void mismatchedStopSequenceAndStopIdPrefersStopId() {
+    var env = builder.addTrip(tripInput).build();
+    var rt = GtfsRtTestHelper.of(env);
+    var update = rt
+      .tripUpdateScheduled(TRIP_1_ID)
+      .addRawStopTime(
+        StopTimeUpdate.newBuilder()
+          .setStopSequence(2)
+          .setStopId(STOP_A_ID)
+          .setArrival(StopTimeEvent.newBuilder().setDelay(60))
+          .setDeparture(StopTimeEvent.newBuilder().setDelay(60))
+          .build()
+      )
+      .build();
+
+    assertSuccess(rt.applyTripUpdate(update));
+    // A carries the explicit delay (real-time times shown, no [ND] flag); B is forward-delay
+    // propagated from A. Without the fix, A would be [ND] and B would carry the delay.
+    assertEquals("U | A 10:01 10:01 | B 10:11 10:11", env.tripData(TRIP_1_ID).showTimetable());
   }
 
   @Test

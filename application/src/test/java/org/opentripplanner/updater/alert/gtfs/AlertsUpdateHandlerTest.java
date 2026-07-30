@@ -25,22 +25,32 @@ import org.opentripplanner.routing.alertpatch.EntitySelector;
 import org.opentripplanner.routing.alertpatch.TransitAlert;
 import org.opentripplanner.routing.impl.TransitAlertServiceImpl;
 import org.opentripplanner.routing.services.TransitAlertService;
+import org.opentripplanner.transit.service.DefaultTransitService;
 import org.opentripplanner.transit.service.TimetableRepository;
+import org.opentripplanner.transit.service.TransitService;
 
 public class AlertsUpdateHandlerTest {
 
   private AlertsUpdateHandler handler;
 
-  private final TransitAlertService service = new TransitAlertServiceImpl(
-    new TimetableRepository()
-  );
+  private final TimetableRepository timetableRepository = newIndexedRepository();
+  private final TransitAlertService service = new TransitAlertServiceImpl(timetableRepository);
+  private final TransitService transitService = new DefaultTransitService(timetableRepository);
 
   @BeforeEach
   public void setUp() {
     handler = new AlertsUpdateHandler(false);
-    handler.setFeedId("1");
+    handler.setFeedIds(List.of("1"));
     handler.setEarlyStart(5);
     handler.setTransitAlertService(service);
+  }
+
+  private static TimetableRepository newIndexedRepository() {
+    var repo = new TimetableRepository();
+    // Required so DefaultTransitService lookups (containsTrip, getRoute, ...) work
+    // against an otherwise-empty repository: they consult the index, which must be built.
+    repo.index();
+    return repo;
   }
 
   @Test
@@ -499,7 +509,7 @@ public class AlertsUpdateHandlerTest {
       .setHeader(GtfsRealtime.FeedHeader.newBuilder().setGtfsRealtimeVersion("2.0"))
       .addEntity(GtfsRealtime.FeedEntity.newBuilder().setAlert(alert).setId("1"))
       .build();
-    handler.update(message, null);
+    handler.update(message, null, transitService);
     Collection<TransitAlert> alerts = service.getAllAlerts();
     assertEquals(1, alerts.size());
     return alerts.iterator().next();

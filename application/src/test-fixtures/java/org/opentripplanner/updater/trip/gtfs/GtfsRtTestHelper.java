@@ -3,9 +3,11 @@ package org.opentripplanner.updater.trip.gtfs;
 import static org.opentripplanner.updater.trip.UpdateIncrementality.FULL_DATASET;
 
 import com.google.transit.realtime.GtfsRealtime;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.opentripplanner.core.framework.deduplicator.DeduplicatorService;
 import org.opentripplanner.transit.model.TransitTestEnvironment;
 import org.opentripplanner.updater.spi.UpdateResult;
@@ -18,17 +20,26 @@ public class GtfsRtTestHelper {
   private final TransitTestEnvironment transitTestEnvironment;
   private final GtfsRealTimeTripUpdateAdapter gtfsAdapter;
 
-  GtfsRtTestHelper(TransitTestEnvironment transitTestEnvironment) {
+  GtfsRtTestHelper(TransitTestEnvironment transitTestEnvironment, Supplier<Instant> instantNow) {
     this.transitTestEnvironment = transitTestEnvironment;
     this.gtfsAdapter = new GtfsRealTimeTripUpdateAdapter(
       transitTestEnvironment.timetableRepository(),
       DeduplicatorService.NOOP,
-      transitTestEnvironment::defaultServiceDate
+      transitTestEnvironment::defaultServiceDate,
+      instantNow
     );
   }
 
   public static GtfsRtTestHelper of(TransitTestEnvironment transitTestEnvironment) {
-    return new GtfsRtTestHelper(transitTestEnvironment);
+    return new GtfsRtTestHelper(transitTestEnvironment, Instant::now);
+  }
+
+  /**
+   * Build a helper whose adapter sees {@code now} as the current instant. Use when testing
+   * time-window-sensitive logic (e.g. NYCT trip replacement periods).
+   */
+  public static GtfsRtTestHelper of(TransitTestEnvironment env, Instant now) {
+    return new GtfsRtTestHelper(env, () -> now);
   }
 
   public TripUpdateBuilder tripUpdateScheduled(String tripId) {
@@ -82,6 +93,26 @@ public class GtfsRtTestHelper {
     List<GtfsRealtime.TripUpdate> updates,
     UpdateIncrementality incrementality
   ) {
+    return applyTripUpdates(updates, List.of(), incrementality);
+  }
+
+  public UpdateResult applyTripUpdates(
+    List<GtfsRealtime.TripUpdate> updates,
+    List<TripReplacementPeriod> tripReplacementPeriods,
+    UpdateIncrementality incrementality
+  ) {
+    return applyTripUpdates(updates, tripReplacementPeriods, incrementality, false);
+  }
+
+  public UpdateResult applyTripUpdates(
+    List<GtfsRealtime.TripUpdate> updates,
+    List<TripReplacementPeriod> tripReplacementPeriods,
+    UpdateIncrementality incrementality,
+    boolean partialTripIdMatching
+  ) {
+    var partialMatcher = partialTripIdMatching
+      ? new GtfsRealtimePartialTripIdMatcher(transitTestEnvironment.transitService())
+      : null;
     var resultRef = new AtomicReference<UpdateResult>();
     try {
       transitTestEnvironment
@@ -93,11 +124,13 @@ public class GtfsRtTestHelper {
               .forUpdate(buffer)
               .applyTripUpdates(
                 null,
+                partialMatcher,
                 ForwardsDelayPropagationType.DEFAULT,
                 BackwardsDelayPropagationType.REQUIRED_NO_DATA,
                 incrementality,
                 updates,
-                transitTestEnvironment.feedId()
+                tripReplacementPeriods,
+                List.of(transitTestEnvironment.feedId())
               )
           );
         })
