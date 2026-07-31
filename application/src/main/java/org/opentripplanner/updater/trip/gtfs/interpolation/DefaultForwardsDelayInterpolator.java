@@ -19,18 +19,49 @@ import org.opentripplanner.transit.model.timetable.StopRealTimeState;
  */
 class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
 
+  /**
+   * When true, a run of stops with no realtime information whose flat-propagated times would
+   * contradict the next provided time (a negative hop) is re-filled by ratio interpolation
+   * between the surrounding provided times — the treatment the spec prescribes for SKIPPED
+   * stops. Exists for feeds (NYC Subway) that omit skipped stops instead of marking them.
+   */
+  private final boolean interpolateContradictions;
+
+  DefaultForwardsDelayInterpolator() {
+    this(false);
+  }
+
+  DefaultForwardsDelayInterpolator(boolean interpolateContradictions) {
+    this.interpolateContradictions = interpolateContradictions;
+  }
+
   @Override
   public boolean interpolateDelay(RealTimeTripTimesBuilder builder) {
     Integer delay = null;
     Integer time = null;
     StopRealTimeState propagatedState = StopRealTimeState.DEFAULT;
     Integer firstCanceledStop = null;
+    Integer firstPropagatedStop = null;
     boolean updated = false;
     boolean firstRealUpdateSeen = false;
     for (var i = 0; i < builder.numberOfStops(); ++i) {
       boolean noTimeGiven = builder.containsNoRealTimeTimes(i);
       if (!noTimeGiven) {
         firstRealUpdateSeen = true;
+        if (interpolateContradictions && firstPropagatedStop != null && time != null) {
+          var providedArrival = builder.getArrivalTime(i) != null
+            ? builder.getArrivalTime(i)
+            : builder.getDepartureTime(i);
+          if (providedArrival != null && providedArrival < time) {
+            // The flat-propagated run contradicts this stop's provided time: the vehicle covered
+            // the run faster than schedule-plus-delay claims (it likely skipped those stops).
+            // Re-fill the run by ratio interpolation between the surrounding provided times so
+            // the update survives validation instead of being rejected as a negative hop.
+            interpolateRun(builder, firstPropagatedStop, i, providedArrival);
+            updated = true;
+          }
+        }
+        firstPropagatedStop = null;
       }
       if (noTimeGiven) {
         if (builder.getStopRealTimeState(i) == StopRealTimeState.DEFAULT) {
@@ -41,7 +72,11 @@ class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
           if (firstCanceledStop == null) {
             firstCanceledStop = i;
           }
+          firstPropagatedStop = null;
           continue;
+        }
+        if (builder.getStopRealTimeState(i) == StopRealTimeState.NO_DATA) {
+          firstPropagatedStop = null;
         }
       }
 
@@ -65,6 +100,13 @@ class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
             builder.withArrivalTime(i, departureTime);
           } else {
             builder.withArrivalDelay(i, delay);
+          }
+          if (
+            noTimeGiven &&
+            firstPropagatedStop == null &&
+            builder.getStopRealTimeState(i) == StopRealTimeState.DEFAULT
+          ) {
+            firstPropagatedStop = i;
           }
         }
         updated = true;
@@ -155,5 +197,37 @@ class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
     }
 
     return updated;
+  }
+
+  /**
+   * Re-fill stops [runStart, nextProvided) by interpolating between the departure at
+   * runStart - 1 and the provided arrival at nextProvided, proportionally to the scheduled
+   * times — the same math used for explicitly SKIPPED runs. Times are clamped to the anchor
+   * window so the result is always non-decreasing, whatever the data claims.
+   */
+  private void interpolateRun(
+    RealTimeTripTimesBuilder builder,
+    int runStart,
+    int nextProvided,
+    int providedArrival
+  ) {
+    Integer prevDeparture = builder.getDepartureTime(runStart - 1);
+    if (prevDeparture == null) {
+      return;
+    }
+    int prevScheduledDeparture = builder.getScheduledDepartureTime(runStart - 1);
+    int scheduledArrival = builder.getScheduledArrivalTime(nextProvided);
+    int scheduledTravelTime = Math.max(scheduledArrival - prevScheduledDeparture, 1);
+    int realTimeTravelTime = Math.max(providedArrival - prevDeparture, 0);
+    double travelTimeRatio = (double) realTimeTravelTime / scheduledTravelTime;
+
+    for (int pos = runStart; pos < nextProvided; pos++) {
+      int scheduledArrivalDiff = builder.getScheduledArrivalTime(pos) - prevScheduledDeparture;
+      int scheduledDepartureDiff = builder.getScheduledDepartureTime(pos) - prevScheduledDeparture;
+      int arrival = prevDeparture + (int) (travelTimeRatio * scheduledArrivalDiff);
+      int departure = prevDeparture + (int) (travelTimeRatio * scheduledDepartureDiff);
+      builder.withArrivalTime(pos, Math.min(Math.max(arrival, prevDeparture), providedArrival));
+      builder.withDepartureTime(pos, Math.min(Math.max(departure, prevDeparture), providedArrival));
+    }
   }
 }

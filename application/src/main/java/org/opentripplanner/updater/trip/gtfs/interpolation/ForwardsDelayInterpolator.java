@@ -15,6 +15,7 @@ public interface ForwardsDelayInterpolator {
     return switch (forwardsDelayPropagationType) {
       case NONE -> builder -> false;
       case DEFAULT -> new DefaultForwardsDelayInterpolator();
+      case INTERPOLATE_CONTRADICTIONS -> new DefaultForwardsDelayInterpolator(true);
     };
   }
 }
