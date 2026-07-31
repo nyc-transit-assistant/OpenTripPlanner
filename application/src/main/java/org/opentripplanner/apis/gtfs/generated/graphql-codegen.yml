@@ -40,6 +40,7 @@ config:
     Agency: org.opentripplanner.transit.model.organization.Agency#Agency
     RouteType: org.opentripplanner.apis.gtfs.model.RouteTypeModel#RouteTypeModel
     Alert: org.opentripplanner.routing.alertpatch.TransitAlert#TransitAlert
+    AlertActivePeriod: org.opentripplanner.routing.alertpatch.TimePeriod#TimePeriod
     AlertCauseType: org.opentripplanner.apis.gtfs.generated.GraphQLTypes.GraphQLAlertCauseType#GraphQLAlertCauseType
     AlertEffectType: org.opentripplanner.apis.gtfs.generated.GraphQLTypes.GraphQLAlertEffectType#GraphQLAlertEffectType
     AlertSeverityLevelType: org.opentripplanner.apis.gtfs.generated.GraphQLTypes.GraphQLAlertSeverityLevelType#GraphQLAlertSeverityLevelType

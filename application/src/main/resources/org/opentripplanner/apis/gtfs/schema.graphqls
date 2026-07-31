@@ -169,6 +169,13 @@ type Alert implements Node {
   ): String
   "Url with more information in all different available languages"
   alertUrlTranslations: [TranslatedString!]! @deprecated(reason : "Use `alertUrl` instead. `accept-language` header can be used for translations or the `language` parameter on the `alertUrl` field.")
+  """
+  The time windows during which this alert is in effect, as published by the agency. An alert
+  may carry several disjoint windows (e.g. one per game day for a stadium service notice);
+  `effectiveStartDate`/`effectiveEndDate` are only the envelope of these windows (earliest
+  start, latest end).
+  """
+  activePeriods: [AlertActivePeriod!]
   "Time when this alert is not in effect anymore. Format: Unix timestamp in seconds"
   effectiveEndDate: Long
   "Time when this alert comes into effect. Format: Unix timestamp in seconds"
@@ -187,6 +194,14 @@ type Alert implements Node {
   stop: Stop @deprecated(reason : "Alert can have multiple affected entities now instead of there being duplicate alerts\nfor different entities. This will return only one of the affected stops.\nUse entities instead.")
   "Trip affected by the disruption"
   trip: Trip @deprecated(reason : "Alert can have multiple affected entities now instead of there being duplicate alerts\nfor different entities. This will return only one of the affected trips.\nUse entities instead.")
+}
+
+"A single time window during which an alert is in effect."
+type AlertActivePeriod {
+  "End of the window. Format: Unix timestamp in seconds. Null for an open-ended window."
+  endTime: Long
+  "Start of the window. Format: Unix timestamp in seconds. Null when the window has no explicit start."
+  startTime: Long
 }
 
 "Arrival and departure time (not relative to midnight)."

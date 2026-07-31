@@ -10,6 +10,7 @@ import graphql.schema.idl.TypeDefinitionRegistry;
 import java.net.URL;
 import java.util.Objects;
 import org.opentripplanner.apis.gtfs.datafetchers.AgencyImpl;
+import org.opentripplanner.apis.gtfs.datafetchers.AlertActivePeriodImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.AlertEntityTypeResolver;
 import org.opentripplanner.apis.gtfs.datafetchers.AlertImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.BikeParkImpl;
@@ -150,6 +151,7 @@ public class SchemaFactory {
         .type("CallScheduledTime", type -> type.typeResolver(new CallScheduledTimeTypeResolver()))
         .type("StepFeature", type -> type.typeResolver(new StepFeatureTypeResolver()))
         .type(typeWiring.build(AgencyImpl.class))
+        .type(typeWiring.build(AlertActivePeriodImpl.class))
         .type(typeWiring.build(AlertImpl.class))
         .type(typeWiring.build(BikeParkImpl.class))
         .type(typeWiring.build(VehicleParkingImpl.class))
