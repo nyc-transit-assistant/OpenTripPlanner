@@ -14,6 +14,7 @@ public record PollingTripUpdaterParameters(
   Duration frequency,
   boolean fuzzyTripMatching,
   boolean partialTripIdMatching,
+  boolean scopedFullDatasetClear,
   ForwardsDelayPropagationType forwardsDelayPropagationType,
   BackwardsDelayPropagationType backwardsDelayPropagationType,
 

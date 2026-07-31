@@ -216,6 +216,9 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
           updateIncrementality,
           updates,
           tripReplacementPeriods,
+          // MQTT is a differential stream with a single writer per feed; the shared-feed
+          // scoped-clear mode exists for polling updaters that fan one feedId across URLs.
+          false,
           feedIds,
           recordMetrics
         )

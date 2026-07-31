@@ -51,6 +51,20 @@ public class PollingTripUpdaterConfig {
         )
         .asBoolean(false),
       c
+        .of("scopedFullDatasetClear")
+        .since(V2_9)
+        .summary(
+          "Never clear the whole feed on FULL_DATASET updates; clear only this updater's routes."
+        )
+        .description(
+          "Set this on every updater when several realtime updaters share one static feed id " +
+            "(e.g. NYCT's per-line GTFS-RT URLs all writing to one subway feed). Each " +
+            "FULL_DATASET update then clears only the routes this updater is authoritative " +
+            "for — its declared trip replacement periods plus the routes present in the " +
+            "batch — instead of wiping data the sibling updaters just applied."
+        )
+        .asBoolean(false),
+      c
         .of("forwardsDelayPropagationType")
         .since(V2_8)
         .summary(ForwardsDelayPropagationType.DEFAULT.typeDescription())

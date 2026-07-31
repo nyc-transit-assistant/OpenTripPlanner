@@ -263,6 +263,7 @@ public abstract class GtfsTest {
         UpdateIncrementality.DIFFERENTIAL,
         updates,
         List.of(),
+        false,
         List.of(FEED_ID)
       );
       alertsUpdateHandler.update(feedMessage, null, transitServiceForAlerts);

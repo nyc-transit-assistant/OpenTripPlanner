@@ -123,6 +123,7 @@ public class GtfsRtTestHelper {
       incrementality,
       updates,
       tripReplacementPeriods,
+      false,
       List.of(transitTestEnvironment.feedId())
     );
     commitTimetableSnapshot();
