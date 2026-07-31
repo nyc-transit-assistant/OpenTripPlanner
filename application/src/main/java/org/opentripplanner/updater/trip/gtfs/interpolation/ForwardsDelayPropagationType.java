@@ -5,7 +5,8 @@ import org.opentripplanner.core.model.doc.DocumentedEnum;
 public enum ForwardsDelayPropagationType implements DocumentedEnum<ForwardsDelayPropagationType> {
   NONE,
   DEFAULT,
-  INTERPOLATE_CONTRADICTIONS;
+  INTERPOLATE_CONTRADICTIONS,
+  CLAMP_CONTRADICTIONS;
 
   @Override
   public String typeDescription() {
@@ -39,6 +40,15 @@ public enum ForwardsDelayPropagationType implements DocumentedEnum<ForwardsDelay
       explicitly `SKIPPED` stops) instead of rejecting the whole update as a negative hop.
       Use this for feeds that silently omit skipped stops rather than marking them `SKIPPED`,
       such as the NYC Subway feeds, where express runs otherwise lose all realtime.
+      """;
+      case CLAMP_CONTRADICTIONS -> """
+      Like `INTERPOLATE_CONTRADICTIONS`, with a final safety net: after interpolation, any
+      remaining contradiction between two explicitly provided times — a negative hop or dwell
+      that interpolation cannot reach because both ends were given by the feed — is repaired by
+      clamping the offending time forward to the previous departure. The trip survives with a
+      degenerate zero-length hop instead of losing every prediction it carries. Repairs are
+      logged at debug level. Use for feeds that emit occasionally contradictory predictions
+      (mixed prediction sources) where discarding the whole trip is worse than a flattened hop.
       """;
     };
   }
