@@ -104,6 +104,7 @@ public class GtfsRealTimeUpdateHandler {
     UpdateIncrementality updateIncrementality,
     List<GtfsRealtime.TripUpdate> updates,
     List<TripReplacementPeriod> tripReplacementPeriods,
+    boolean scopedFullDatasetClear,
     List<String> feedIds
   ) {
     if (feedIds == null || feedIds.isEmpty()) {
@@ -132,7 +133,33 @@ public class GtfsRealTimeUpdateHandler {
     Set<String> unresolvedRouteIds = new HashSet<>();
 
     if (updateIncrementality == FULL_DATASET) {
-      if (coveredRouteIds.isEmpty()) {
+      if (scopedFullDatasetClear) {
+        // Shared-feed mode: this updater is never authoritative for the whole feed, so an
+        // unscoped clear is never permitted — with several per-line updaters writing to one
+        // feedId (NYCT), an unscoped clear wipes the siblings' just-applied data and the last
+        // writer wins. Scope = declared replacement periods (fresh or expired — expiry gates
+        // cancellation authority, not ownership) ∪ routes present in this batch, so an updater
+        // whose feed omits the NYCT header extension (the G at times) still clears exactly its
+        // own slice. An empty scope clears nothing.
+        Set<String> scopeRouteIds = new HashSet<>();
+        for (var period : tripReplacementPeriods) {
+          scopeRouteIds.add(period.routeId());
+        }
+        for (var u : updates) {
+          if (u.hasTrip() && u.getTrip().hasRouteId() && !u.getTrip().getRouteId().isBlank()) {
+            scopeRouteIds.add(u.getTrip().getRouteId());
+          }
+        }
+        if (!scopeRouteIds.isEmpty()) {
+          for (String feedId : feedIds) {
+            Set<FeedScopedId> scoped = scopeRouteIds
+              .stream()
+              .map(rid -> new FeedScopedId(feedId, rid))
+              .collect(Collectors.toSet());
+            buffer.clear(feedId, scoped);
+          }
+        }
+      } else if (coveredRouteIds.isEmpty()) {
         // Single authoritative source for this feedId — wipe the whole feed.
         for (String feedId : feedIds) {
           buffer.clear(feedId);

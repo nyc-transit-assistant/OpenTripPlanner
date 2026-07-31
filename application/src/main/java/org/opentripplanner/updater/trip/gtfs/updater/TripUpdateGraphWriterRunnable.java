@@ -37,6 +37,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
   private final List<TripReplacementPeriod> tripReplacementPeriods;
 
   private final List<String> feedIds;
+  private final boolean scopedFullDatasetClear;
   private final Consumer<UpdateResult> sendMetrics;
   private final GtfsRealTimeTripUpdateAdapter adapter;
 
@@ -49,6 +50,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     UpdateIncrementality updateIncrementality,
     List<TripUpdate> updates,
     List<TripReplacementPeriod> tripReplacementPeriods,
+    boolean scopedFullDatasetClear,
     List<String> feedIds,
     Consumer<UpdateResult> sendMetrics
   ) {
@@ -60,6 +62,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     this.updateIncrementality = updateIncrementality;
     this.updates = Objects.requireNonNull(updates);
     this.tripReplacementPeriods = List.copyOf(Objects.requireNonNull(tripReplacementPeriods));
+    this.scopedFullDatasetClear = scopedFullDatasetClear;
     this.feedIds = List.copyOf(Objects.requireNonNull(feedIds));
     if (this.feedIds.isEmpty()) {
       throw new IllegalArgumentException("feedIds must contain at least one feedId");
@@ -82,6 +85,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
         updateIncrementality,
         updates,
         tripReplacementPeriods,
+        scopedFullDatasetClear,
         feedIds
       );
     sendMetrics.accept(result);

@@ -54,6 +54,9 @@ public class PollingTripUpdater extends PollingGraphUpdater {
    */
   private final boolean partialTripIdMatching;
 
+  /** See {@code PollingTripUpdaterConfig}: shared-feed updaters must never clear unscoped. */
+  private final boolean scopedFullDatasetClear;
+
   public PollingTripUpdater(
     PollingTripUpdaterParameters parameters,
     GtfsRealTimeTripUpdateAdapter adapter
@@ -66,6 +69,7 @@ public class PollingTripUpdater extends PollingGraphUpdater {
     this.backwardsDelayPropagationType = parameters.backwardsDelayPropagationType();
     this.adapter = adapter;
     this.fuzzyTripMatching = parameters.fuzzyTripMatching();
+    this.scopedFullDatasetClear = parameters.scopedFullDatasetClear();
     this.partialTripIdMatching = parameters.partialTripIdMatching();
 
     this.recordMetrics = BatchTripUpdateMetrics.batch(parameters);
@@ -94,6 +98,7 @@ public class PollingTripUpdater extends PollingGraphUpdater {
         incrementality,
         updates,
         updateSource.tripReplacementPeriodsOfLastUpdates(),
+        scopedFullDatasetClear,
         feedIds,
         recordMetrics
       );
