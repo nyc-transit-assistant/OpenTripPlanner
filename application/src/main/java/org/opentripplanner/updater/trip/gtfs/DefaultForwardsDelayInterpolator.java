@@ -3,6 +3,8 @@ package org.opentripplanner.updater.trip.gtfs;
 import java.util.Objects;
 import org.opentripplanner.transit.model.timetable.RealTimeTripTimesBuilder;
 import org.opentripplanner.transit.model.timetable.StopRealTimeState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This interpolator fills in missing times according to the:
@@ -19,6 +21,8 @@ import org.opentripplanner.transit.model.timetable.StopRealTimeState;
  */
 class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
 
+  private static final Logger LOG = LoggerFactory.getLogger(DefaultForwardsDelayInterpolator.class);
+
   /**
    * When true, a run of stops with no realtime information whose flat-propagated times would
    * contradict the next provided time (a negative hop) is re-filled by ratio interpolation
@@ -27,12 +31,26 @@ class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
    */
   private final boolean interpolateContradictions;
 
+  /**
+   * When true, run a final monotonicity pass after interpolation: any remaining contradiction
+   * between two explicitly provided times (which interpolation cannot repair — it only re-fills
+   * runs of stops that had no realtime information) is clamped forward to the previous
+   * departure, mirroring the exact check in RealTimeTripTimes#validateNonIncreasingTimes, so
+   * the update survives with a degenerate hop instead of being rejected outright.
+   */
+  private final boolean clampContradictions;
+
   DefaultForwardsDelayInterpolator() {
-    this(false);
+    this(false, false);
   }
 
   DefaultForwardsDelayInterpolator(boolean interpolateContradictions) {
+    this(interpolateContradictions, false);
+  }
+
+  DefaultForwardsDelayInterpolator(boolean interpolateContradictions, boolean clampContradictions) {
     this.interpolateContradictions = interpolateContradictions;
+    this.clampContradictions = clampContradictions;
   }
 
   @Override
@@ -196,7 +214,46 @@ class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
       return builder.copyMissingTimesFromScheduledTimetable();
     }
 
+    if (clampContradictions) {
+      updated |= clampNonMonotonicTimes(builder);
+    }
+
     return updated;
+  }
+
+  /**
+   * Enforce non-decreasing times across the whole trip, walking the same shape as
+   * RealTimeTripTimes#validateNonIncreasingTimes: any arrival earlier than the previous
+   * departure, or departure earlier than its own arrival, is pushed forward to equality.
+   * Only fires on contradictions between provided times — interpolation has already repaired
+   * everything repairable by the time this runs.
+   */
+  private boolean clampNonMonotonicTimes(RealTimeTripTimesBuilder builder) {
+    int repairs = 0;
+    Integer prevDeparture = null;
+    for (int i = 0; i < builder.numberOfStops(); i++) {
+      Integer arrival = builder.getArrivalTime(i);
+      if (arrival != null && prevDeparture != null && arrival < prevDeparture) {
+        builder.withArrivalTime(i, prevDeparture);
+        arrival = prevDeparture;
+        repairs++;
+      }
+      Integer departure = builder.getDepartureTime(i);
+      if (departure != null && arrival != null && departure < arrival) {
+        builder.withDepartureTime(i, arrival);
+        departure = arrival;
+        repairs++;
+      }
+      if (departure != null) {
+        prevDeparture = departure;
+      } else if (arrival != null) {
+        prevDeparture = arrival;
+      }
+    }
+    if (repairs > 0) {
+      LOG.debug("Clamped {} non-monotonic stop time(s) on trip {}", repairs, builder.getTrip());
+    }
+    return repairs > 0;
   }
 
   /**
