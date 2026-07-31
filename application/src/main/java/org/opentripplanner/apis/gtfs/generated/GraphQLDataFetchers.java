@@ -57,6 +57,7 @@ import org.opentripplanner.model.plan.walkstep.WalkStep;
 import org.opentripplanner.place.api.NearbyStop;
 import org.opentripplanner.place.api.PatternAtStop;
 import org.opentripplanner.place.api.PlaceAtDistance;
+import org.opentripplanner.routing.alertpatch.TimePeriod;
 import org.opentripplanner.routing.alertpatch.TransitAlert;
 import org.opentripplanner.routing.api.response.RoutingError;
 import org.opentripplanner.service.realtimevehicles.model.RealtimeVehicle;
@@ -104,7 +105,18 @@ public class GraphQLDataFetchers {
   }
 
   /** Alert of a current or upcoming disruption in public transportation */
+  /** Manually added for the NYC fork's AlertActivePeriod schema type. */
+  public interface GraphQLAlertActivePeriod {
+    public DataFetcher<Long> endTime();
+
+    public DataFetcher<Long> startTime();
+  }
+
   public interface GraphQLAlert {
+    // Manually added for the NYC fork's `activePeriods` schema field; regenerate-and-diff
+    // when the pinned graphql-codegen version is realigned with these checked-in files.
+    public DataFetcher<Iterable<TimePeriod>> activePeriods();
+
     public DataFetcher<Agency> agency();
     public DataFetcher<GraphQLAlertCauseType> alertCause();
     public DataFetcher<String> alertDescriptionText();

@@ -146,6 +146,11 @@ public class AlertImpl implements GraphQLDataFetchers.GraphQLAlert {
   }
 
   @Override
+  public DataFetcher<Iterable<org.opentripplanner.routing.alertpatch.TimePeriod>> activePeriods() {
+    return environment -> getSource(environment).timePeriods();
+  }
+
+  @Override
   public DataFetcher<Long> effectiveStartDate() {
     return environment -> {
       Instant effectiveStartDate = getSource(environment).getEffectiveStartDate();
