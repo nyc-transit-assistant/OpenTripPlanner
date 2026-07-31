@@ -160,6 +160,7 @@ public class GtfsRealTimeTripUpdateAdapter {
     List<UpdateError> errors = new ArrayList<>();
     Set<FeedScopedId> seenTripIds = new HashSet<>();
     int partialTripIdMatches = 0;
+    int strippedEmptyStopTimeEvents = 0;
     int convertedScheduledToAdded = 0;
     int convertedScheduledToAddedDueToPatternDivergence = 0;
 
@@ -227,6 +228,11 @@ public class GtfsRealTimeTripUpdateAdapter {
     for (var rawTripUpdate : updates) {
       UpdateSuccess result;
       try {
+        var sanitized = stripEmptyStopTimeEvents(rawTripUpdate);
+        if (sanitized != rawTripUpdate) {
+          strippedEmptyStopTimeEvents++;
+          rawTripUpdate = sanitized;
+        }
         String resolvedFeedId = resolveFeedIdForTripUpdate(rawTripUpdate, feedIds);
 
         if (partialTripIdMatcher != null) {
@@ -333,7 +339,8 @@ public class GtfsRealTimeTripUpdateAdapter {
     }
     if (partialTripIdMatcher != null && !updates.isEmpty()) {
       LOG.info(
-        "[feedIds={}] partial-matcher diag: {}",
+        "[feedIds={}] partial-matcher diag: {}, strippedEmptyStopTimeEvents=" +
+          strippedEmptyStopTimeEvents,
         feedIds,
         partialTripIdMatcher.summarizeCounters()
       );
@@ -872,5 +879,62 @@ public class GtfsRealTimeTripUpdateAdapter {
   private enum CancelationType {
     CANCEL,
     DELETE,
+  }
+
+  /**
+   * Remove StopTimeEvents that are present but empty (neither time nor delay), and drop
+   * StopTimeUpdates left with no events at all and no other semantics.
+   * <p>
+   * The spec requires a StopTimeEvent to carry a time or a delay, and stock OTP rejects the
+   * whole trip update over a violation (INVALID_ARRIVAL_TIME / INVALID_DEPARTURE_TIME). NYCT
+   * prepends exactly such a degenerate entry — the trip's terminal, out of sequence, with an
+   * empty departure event — to trips that haven't started yet, which would cost the trip its
+   * entire prediction set. An empty event carries the same information as an absent one, so
+   * stripping it is lossless; a stop left with no events simply isn't mentioned, which the
+   * delay interpolators already handle.
+   *
+   * @return the same instance when nothing needed stripping, a rebuilt update otherwise
+   */
+  static GtfsRealtime.TripUpdate stripEmptyStopTimeEvents(GtfsRealtime.TripUpdate tripUpdate) {
+    boolean changed = false;
+    var builder = tripUpdate.toBuilder();
+    var cleaned = new ArrayList<GtfsRealtime.TripUpdate.StopTimeUpdate>(
+      tripUpdate.getStopTimeUpdateCount()
+    );
+    for (var stu : tripUpdate.getStopTimeUpdateList()) {
+      var stuBuilder = stu.toBuilder();
+      boolean stuChanged = false;
+      if (stu.hasArrival() && !stu.getArrival().hasTime() && !stu.getArrival().hasDelay()) {
+        stuBuilder.clearArrival();
+        stuChanged = true;
+      }
+      if (stu.hasDeparture() && !stu.getDeparture().hasTime() && !stu.getDeparture().hasDelay()) {
+        stuBuilder.clearDeparture();
+        stuChanged = true;
+      }
+      if (stuChanged) {
+        changed = true;
+        var result = stuBuilder.build();
+        // A stop with no events left and plain SCHEDULED semantics is simply not mentioned.
+        // SKIPPED / NO_DATA entries keep their meaning without times and are preserved.
+        if (
+          !result.hasArrival() &&
+          !result.hasDeparture() &&
+          result.getScheduleRelationship() ==
+          GtfsRealtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.SCHEDULED
+        ) {
+          continue;
+        }
+        cleaned.add(result);
+      } else {
+        cleaned.add(stu);
+      }
+    }
+    if (!changed) {
+      return tripUpdate;
+    }
+    builder.clearStopTimeUpdate();
+    builder.addAllStopTimeUpdate(cleaned);
+    return builder.build();
   }
 }
