@@ -139,16 +139,26 @@ public class GtfsRealTimeUpdateHandler {
         // unscoped clear is never permitted — with several per-line updaters writing to one
         // feedId (NYCT), an unscoped clear wipes the siblings' just-applied data and the last
         // writer wins. Scope = declared replacement periods (fresh or expired — expiry gates
-        // cancellation authority, not ownership) ∪ routes present in this batch, so an updater
-        // whose feed omits the NYCT header extension (the G at times) still clears exactly its
-        // own slice. An empty scope clears nothing.
+        // cancellation authority, not ownership). Routes merely present in the batch do NOT
+        // widen the scope when periods exist: NYCT slips stray foreign-route entries into a
+        // sibling feed (rerouted E shells in the BDFM feed, with zero stop time updates), and
+        // letting those claim route-level clear authority makes this updater wipe the entire
+        // foreign route's realtime every cycle while re-applying nothing — the exact
+        // last-writer-wins failure scoping exists to prevent. Batch routes are the fallback
+        // only when the feed declares no periods at all (the G omits the NYCT header
+        // extension at times), where they are the only ownership signal available. An empty
+        // scope clears nothing. The cost: a route whose period NYCT forgets to declare keeps
+        // ghost entries for trips that leave the feed — bounded staleness, versus a sibling
+        // erasing a whole route's live data.
         Set<String> scopeRouteIds = new HashSet<>();
         for (var period : tripReplacementPeriods) {
           scopeRouteIds.add(period.routeId());
         }
-        for (var u : updates) {
-          if (u.hasTrip() && u.getTrip().hasRouteId() && !u.getTrip().getRouteId().isBlank()) {
-            scopeRouteIds.add(u.getTrip().getRouteId());
+        if (scopeRouteIds.isEmpty()) {
+          for (var u : updates) {
+            if (u.hasTrip() && u.getTrip().hasRouteId() && !u.getTrip().getRouteId().isBlank()) {
+              scopeRouteIds.add(u.getTrip().getRouteId());
+            }
           }
         }
         if (!scopeRouteIds.isEmpty()) {
