@@ -117,6 +117,7 @@ public class GtfsRealTimeUpdateHandler {
     int strippedEmptyStopTimeEvents = 0;
     int convertedScheduledToAdded = 0;
     int convertedScheduledToAddedDueToPatternDivergence = 0;
+    int skippedInformationlessUpdates = 0;
 
     // Inside an active trip_replacement_period the realtime feed is authoritative for the
     // covered route. If we can't resolve an RT trip to a static trip, treat it as ADDED rather
@@ -225,6 +226,19 @@ public class GtfsRealTimeUpdateHandler {
           }
         }
 
+        // NYCT emits informationless updates two ways: placeholder-only updates on unstarted
+        // trips (whose sole degenerate event the sanitizer just stripped) and zero-STU stray
+        // shells for rerouted trains slipped into sibling feeds. Neither carries anything
+        // applyable — skip them as counted benign events rather than failing the batch with
+        // NO_UPDATES / TRIP_NOT_FOUND noise that drowns real regressions in the metrics.
+        // Ordering matters: the trip was recorded in seenTripIds above, so cancel-by-omission
+        // still treats it as present in the feed. CANCELED updates legitimately carry no stop
+        // time updates and pass through untouched.
+        if (isInformationlessUpdate(rawTripUpdate)) {
+          skippedInformationlessUpdates++;
+          continue;
+        }
+
         // If this RT trip is on a route covered by an active replacement period and either
         // (a) doesn't resolve to a static trip after partial/fuzzy matching, or (b) resolves
         // but reports stops not present in the resolved static pattern, rewrite it to NEW.
@@ -304,7 +318,9 @@ public class GtfsRealTimeUpdateHandler {
     if (partialTripIdMatcher != null && !updates.isEmpty()) {
       LOG.info(
         "[feedIds={}] partial-matcher diag: {}, strippedEmptyStopTimeEvents=" +
-          strippedEmptyStopTimeEvents,
+          strippedEmptyStopTimeEvents +
+          ", skippedInformationlessUpdates=" +
+          skippedInformationlessUpdates,
         feedIds,
         partialTripIdMatcher.summarizeCounters()
       );
@@ -554,6 +570,27 @@ public class GtfsRealTimeUpdateHandler {
    *
    * @return the same instance when nothing needed stripping, a rebuilt update otherwise
    */
+  /**
+   * True when the update carries no stop time updates and plain SCHEDULED semantics — nothing
+   * to apply, nothing being cancelled. Such updates are presence markers at most.
+   */
+  static boolean isInformationlessUpdate(GtfsRealtime.TripUpdate tripUpdate) {
+    if (tripUpdate.getStopTimeUpdateCount() > 0) {
+      return false;
+    }
+    var trip = tripUpdate.getTrip();
+    // A shell must at least reference a trip: updates with a missing or blank trip id are
+    // structurally invalid, not informationless, and must still fail validation
+    // (INVALID_INPUT_STRUCTURE) instead of being silently skipped.
+    if (!trip.hasTripId() || trip.getTripId().isBlank()) {
+      return false;
+    }
+    return (
+      !trip.hasScheduleRelationship() ||
+      trip.getScheduleRelationship() == GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED
+    );
+  }
+
   static GtfsRealtime.TripUpdate stripEmptyStopTimeEvents(GtfsRealtime.TripUpdate tripUpdate) {
     boolean changed = false;
     var builder = tripUpdate.toBuilder();
