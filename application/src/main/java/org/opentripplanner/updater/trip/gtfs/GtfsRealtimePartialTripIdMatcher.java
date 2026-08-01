@@ -4,6 +4,8 @@ import com.google.transit.realtime.GtfsRealtime.TripDescriptor;
 import java.text.ParseException;
 import java.time.LocalDate;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transit.model.network.Route;
@@ -36,6 +38,12 @@ public class GtfsRealtimePartialTripIdMatcher {
   private static final Logger LOG = LoggerFactory.getLogger(GtfsRealtimePartialTripIdMatcher.class);
 
   private final TransitService transitService;
+
+  /**
+   * Realtime route ids NYCT uses that don't exist in the static GTFS. The SIR feed labels
+   * shuttle-pattern trains {@code SS} while the static feed only has {@code SI}.
+   */
+  private static final Map<String, String> ROUTE_ALIASES = Map.of("SS", "SI");
 
   // Per-batch diagnostic counters. Reset implicitly because a fresh matcher is built per
   // graph-writer run.
@@ -96,14 +104,26 @@ public class GtfsRealtimePartialTripIdMatcher {
       return trip;
     }
 
-    Route route = transitService.getRoute(new FeedScopedId(feedId, trip.getRouteId()));
+    var effectiveRouteId = trip.getRouteId();
+    Route route = transitService.getRoute(new FeedScopedId(feedId, effectiveRouteId));
+    if (route == null && ROUTE_ALIASES.containsKey(effectiveRouteId)) {
+      effectiveRouteId = ROUTE_ALIASES.get(effectiveRouteId);
+      route = transitService.getRoute(new FeedScopedId(feedId, effectiveRouteId));
+    }
     if (route == null) {
       routeNotFoundCount++;
       return trip;
     }
 
     var serviceIdsOnDate = transitService.getCalendarService().getServiceIdsOnDate(serviceDate);
-    var suffix = "_" + realtimeTripId;
+    // The path separator's dot count is not stable between realtime and static ids: the SIR
+    // realtime feed sends `116600_SI.N03R` while the active static schedule uses
+    // `..._116600_SI..N03R` (and older supplement trips the single-dot form). Try the id as
+    // sent first, then its dot-swapped twin.
+    var suffixes = tripIdDotAlternates(realtimeTripId)
+      .stream()
+      .map(id -> "_" + id)
+      .toList();
 
     var allTripsOnRoute = transitService
       .findPatterns(route)
@@ -113,7 +133,7 @@ public class GtfsRealtimePartialTripIdMatcher {
 
     var exactCandidates = allTripsOnRoute
       .stream()
-      .filter(t -> t.getId().getId().endsWith(suffix))
+      .filter(t -> suffixes.stream().anyMatch(s -> t.getId().getId().endsWith(s)))
       .toList();
 
     Trip match = exactCandidates
@@ -124,17 +144,20 @@ public class GtfsRealtimePartialTripIdMatcher {
 
     if (match != null) {
       matchedCount++;
-      return trip.toBuilder().setTripId(match.getId().getId()).build();
+      return rewritten(trip, match, effectiveRouteId);
     }
 
     // Fuzzy fallback: NYCT's L feed (and others) strips the route-variant suffix from the trip
     // id, sending e.g. `128650_L..S` while the static GTFS uses `..._128650_L..S01R`. Try
     // matching where the static id continues past the rt id with an alphanumeric variant
     // suffix and no underscore (so we don't accidentally cross a id segment boundary).
-    var variantPattern = Pattern.compile(".*" + Pattern.quote(suffix) + "(?<variant>[A-Z0-9]+)$");
+    var variantPatterns = suffixes
+      .stream()
+      .map(s -> Pattern.compile(".*" + Pattern.quote(s) + "(?<variant>[A-Z0-9]+)$"))
+      .toList();
     var fuzzyCandidates = allTripsOnRoute
       .stream()
-      .filter(t -> variantPattern.matcher(t.getId().getId()).matches())
+      .filter(t -> variantPatterns.stream().anyMatch(p -> p.matcher(t.getId().getId()).matches()))
       .toList();
     Trip fuzzyMatch = fuzzyCandidates
       .stream()
@@ -145,7 +168,7 @@ public class GtfsRealtimePartialTripIdMatcher {
     if (fuzzyMatch != null) {
       matchedCount++;
       matchedByVariantSuffixCount++;
-      return trip.toBuilder().setTripId(fuzzyMatch.getId().getId()).build();
+      return rewritten(trip, fuzzyMatch, effectiveRouteId);
     }
 
     var allCandidates = exactCandidates.isEmpty() ? fuzzyCandidates : exactCandidates;
@@ -153,10 +176,9 @@ public class GtfsRealtimePartialTripIdMatcher {
       noCandidatesCount++;
       if (noCandidatesCount == 1) {
         LOG.warn(
-          "Partial match: no static trip on route {} ends with suffix '{}' or '{}<variant>' (rt trip {}, service date {})",
+          "Partial match: no static trip on route {} ends with suffix(es) {} (rt trip {}, service date {})",
           trip.getRouteId(),
-          suffix,
-          suffix,
+          suffixes,
           realtimeTripId,
           serviceDate
         );
@@ -165,10 +187,10 @@ public class GtfsRealtimePartialTripIdMatcher {
       candidatesButNoActiveServiceCount++;
       if (candidatesButNoActiveServiceCount == 1) {
         LOG.warn(
-          "Partial match: {} candidate(s) on route {} match suffix '{}' (or with variant) but none have a service id active on {} — candidates' service ids: {}, active service ids count: {}",
+          "Partial match: {} candidate(s) on route {} match suffix(es) {} (or with variant) but none have a service id active on {} — candidates' service ids: {}, active service ids count: {}",
           allCandidates.size(),
           trip.getRouteId(),
-          suffix,
+          suffixes,
           serviceDate,
           allCandidates
             .stream()
@@ -179,6 +201,33 @@ public class GtfsRealtimePartialTripIdMatcher {
       }
     }
     return trip;
+  }
+
+  private static TripDescriptor rewritten(
+    TripDescriptor trip,
+    Trip match,
+    String effectiveRouteId
+  ) {
+    var builder = trip.toBuilder().setTripId(match.getId().getId());
+    if (!effectiveRouteId.equals(trip.getRouteId())) {
+      builder.setRouteId(effectiveRouteId);
+    }
+    return builder.build();
+  }
+
+  /**
+   * The realtime id as sent plus, when it contains a dot-run path separator
+   * ({@code 116600_SI.N03R} / {@code 110400_L..N}), the same id with the opposite dot count —
+   * NYCT is not consistent about which form a feed uses versus the static schedule.
+   */
+  static List<String> tripIdDotAlternates(String realtimeTripId) {
+    if (realtimeTripId.contains("..")) {
+      return List.of(realtimeTripId, realtimeTripId.replaceFirst("\\.\\.", "."));
+    }
+    if (realtimeTripId.contains(".")) {
+      return List.of(realtimeTripId, realtimeTripId.replaceFirst("\\.", ".."));
+    }
+    return List.of(realtimeTripId);
   }
 
   /**
