@@ -1,0 +1,29 @@
+{
+  # A station returns its own entrances.
+  station(id: "F:Omega") {
+    gtfsId
+    entrances {
+      entranceId
+      name
+      publicCode
+      lat
+      lon
+      wheelchairAccessible
+    }
+  }
+  # A stop that is part of a station returns the parent station's entrances.
+  stopInStation: stop(id: "F:C") {
+    gtfsId
+    entrances {
+      entranceId
+      publicCode
+    }
+  }
+  # A stop without a parent station returns null.
+  standaloneStop: stop(id: "F:A") {
+    gtfsId
+    entrances {
+      entranceId
+    }
+  }
+}

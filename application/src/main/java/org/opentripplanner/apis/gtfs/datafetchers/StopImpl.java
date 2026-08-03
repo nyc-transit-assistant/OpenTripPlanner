@@ -36,6 +36,7 @@ import org.opentripplanner.transfer.regular.RegularTransferService;
 import org.opentripplanner.transit.model.framework.AbstractTransitEntity;
 import org.opentripplanner.transit.model.network.Route;
 import org.opentripplanner.transit.model.network.TripPattern;
+import org.opentripplanner.transit.model.site.Entrance;
 import org.opentripplanner.transit.model.site.RegularStop;
 import org.opentripplanner.transit.model.site.Station;
 import org.opentripplanner.transit.model.site.StopLocation;
@@ -215,6 +216,21 @@ public class StopImpl implements GraphQLDataFetchers.GraphQLStop {
   @Override
   public DataFetcher<String> direction() {
     return environment -> null;
+  }
+
+  @Override
+  public DataFetcher<Iterable<Entrance>> entrances() {
+    return environment -> {
+      var transitService = getTransitService(environment);
+      return getValue(
+        environment,
+        stop -> {
+          var parentStation = stop.getParentStation();
+          return parentStation == null ? null : transitService.findEntrances(parentStation);
+        },
+        transitService::findEntrances
+      );
+    };
   }
 
   @Override

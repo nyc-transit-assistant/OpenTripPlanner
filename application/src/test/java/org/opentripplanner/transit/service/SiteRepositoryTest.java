@@ -14,6 +14,7 @@ import org.opentripplanner.core.model.id.FeedScopedIdForTestFactory;
 import org.opentripplanner.street.geometry.GeometryUtils;
 import org.opentripplanner.street.geometry.WgsCoordinate;
 import org.opentripplanner.transit.model.site.AreaStop;
+import org.opentripplanner.transit.model.site.Entrance;
 import org.opentripplanner.transit.model.site.GroupOfStations;
 import org.opentripplanner.transit.model.site.GroupStop;
 import org.opentripplanner.transit.model.site.MultiModalStation;
@@ -102,6 +103,41 @@ class SiteRepositoryTest {
     assertEquals(expStops, m.findStopOrChildStops(ID).toString());
     assertEquals(EXP_STATIONS, m.listStopLocationGroups().toString());
     assertFalse(m.hasAreaStops());
+  }
+
+  @Test
+  void testFindEntrances() {
+    var otherStation = Station.of(FeedScopedIdForTestFactory.id("OtherStation"))
+      .withName(NAME)
+      .withCoordinate(COOR_B)
+      .build();
+    var entranceA = Entrance.of(FeedScopedIdForTestFactory.id("EntranceA"))
+      .withCoordinate(COOR_A)
+      .withParentStation(STATION)
+      .build();
+    var entranceB = Entrance.of(FeedScopedIdForTestFactory.id("EntranceB"))
+      .withCoordinate(COOR_B)
+      .withParentStation(STATION)
+      .build();
+    var otherEntrance = Entrance.of(FeedScopedIdForTestFactory.id("OtherEntrance"))
+      .withCoordinate(COOR_B)
+      .withParentStation(otherStation)
+      .build();
+    var m = siteRepositoryBuilder
+      .withStation(STATION)
+      .withStation(otherStation)
+      .withEntrance(entranceA)
+      .withEntrance(entranceB)
+      .withEntrance(otherEntrance)
+      .build();
+
+    assertEquals(List.of(entranceA, entranceB), List.copyOf(m.findEntrances(STATION)));
+    assertEquals(List.of(otherEntrance), List.copyOf(m.findEntrances(otherStation)));
+    var emptyStation = Station.of(FeedScopedIdForTestFactory.id("EmptyStation"))
+      .withName(NAME)
+      .withCoordinate(COOR_B)
+      .build();
+    assertTrue(m.findEntrances(emptyStation).isEmpty());
   }
 
   @Test

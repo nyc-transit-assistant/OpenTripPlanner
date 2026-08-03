@@ -132,6 +132,20 @@ class GraphQLIntegrationTest {
   private static final TimetableRepositoryForTest TEST_MODEL = TimetableRepositoryForTest.of();
 
   private static final Station OMEGA = TEST_MODEL.station("Omega").build();
+  private static final Entrance OMEGA_ENTRANCE_A = Entrance.of(id("omega-entrance-a"))
+    .withName(I18NString.of("Omega North Entrance"))
+    .withCode("A")
+    .withCoordinate(60.001, 10.001)
+    .withWheelchairAccessibility(Accessibility.POSSIBLE)
+    .withParentStation(OMEGA)
+    .build();
+  private static final Entrance OMEGA_ENTRANCE_B = Entrance.of(id("omega-entrance-b"))
+    .withName(I18NString.of("Omega South Entrance"))
+    .withCode("B")
+    .withCoordinate(59.999, 9.999)
+    .withWheelchairAccessibility(Accessibility.NOT_POSSIBLE)
+    .withParentStation(OMEGA)
+    .build();
   private static final Place A = TEST_MODEL.place("A", 5.0, 8.0);
   private static final Place B = TEST_MODEL.place("B", 6.0, 8.5);
   private static final Place C = TEST_MODEL.place(
@@ -213,6 +227,8 @@ class GraphQLIntegrationTest {
     var siteRepositoryBuilder = TEST_MODEL.siteRepositoryBuilder();
     STOP_LOCATIONS.forEach(siteRepositoryBuilder::withRegularStop);
     siteRepositoryBuilder.withStation(OMEGA);
+    siteRepositoryBuilder.withEntrance(OMEGA_ENTRANCE_A);
+    siteRepositoryBuilder.withEntrance(OMEGA_ENTRANCE_B);
     var siteRepository = siteRepositoryBuilder.build();
     var timetableRepository = new TimetableRepository(siteRepository);
 

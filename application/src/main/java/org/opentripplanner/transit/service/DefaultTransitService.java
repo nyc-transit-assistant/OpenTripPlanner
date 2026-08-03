@@ -228,6 +228,11 @@ public class DefaultTransitService implements TransitEditorService {
   }
 
   @Override
+  public Collection<Entrance> findEntrances(Station station) {
+    return this.timetableRepository.getSiteRepository().findEntrances(station);
+  }
+
+  @Override
   public AreaStop getAreaStop(FeedScopedId id) {
     return Objects.requireNonNull(this.timetableRepository.getSiteRepository().getAreaStop(id));
   }

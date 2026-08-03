@@ -585,6 +585,10 @@ type Emissions {
 type Entrance {
   "ID of the entrance in the format of `FeedId:EntranceId`. If the `FeedId` is `osm`, the entrance originates from OSM data."
   entranceId: String!
+  "Latitude of the entrance or exit (WGS 84)"
+  lat: Float
+  "Longitude of the entrance or exit (WGS 84)"
+  lon: Float
   "Name of the entrance or exit."
   name: String
   "Short text or a number that identifies the entrance or exit for passengers. For example, `A` or `B`."
@@ -2446,6 +2450,13 @@ type Stop implements Node & PlaceInterface {
     language: String
   ): String
   direction: String
+  """
+  Entrances and exits of this station, from the static transit data (GTFS `location_type=2`
+  stops, NeTEx entrances). For a station, its own entrances are returned. For a stop that is
+  part of a station, the parent station's entrances are returned. `null` when the stop is not
+  part of a station; an empty list when the station has no entrances in the input data.
+  """
+  entrances: [Entrance!]
   """
   Representations of this stop's geometry. This is mainly interesting for flex stops which can be
   a polygon or a group of stops either consisting of either points or polygons.

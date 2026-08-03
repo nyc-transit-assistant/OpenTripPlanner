@@ -25,6 +25,22 @@ public class EntranceImpl implements GraphQLDataFetchers.GraphQLEntrance {
   }
 
   @Override
+  public DataFetcher<Double> lat() {
+    return environment -> {
+      Entrance entrance = environment.getSource();
+      return entrance.getCoordinate().latitude();
+    };
+  }
+
+  @Override
+  public DataFetcher<Double> lon() {
+    return environment -> {
+      Entrance entrance = environment.getSource();
+      return entrance.getCoordinate().longitude();
+    };
+  }
+
+  @Override
   public DataFetcher<String> name() {
     return environment -> {
       Entrance entrance = environment.getSource();

@@ -1,0 +1,42 @@
+{
+  "data": {
+    "station": {
+      "gtfsId": "F:Omega",
+      "entrances": [
+        {
+          "entranceId": "F:omega-entrance-a",
+          "name": "Omega North Entrance",
+          "publicCode": "A",
+          "lat": 60.001,
+          "lon": 10.001,
+          "wheelchairAccessible": "POSSIBLE"
+        },
+        {
+          "entranceId": "F:omega-entrance-b",
+          "name": "Omega South Entrance",
+          "publicCode": "B",
+          "lat": 59.999,
+          "lon": 9.999,
+          "wheelchairAccessible": "NOT_POSSIBLE"
+        }
+      ]
+    },
+    "stopInStation": {
+      "gtfsId": "F:C",
+      "entrances": [
+        {
+          "entranceId": "F:omega-entrance-a",
+          "publicCode": "A"
+        },
+        {
+          "entranceId": "F:omega-entrance-b",
+          "publicCode": "B"
+        }
+      ]
+    },
+    "standaloneStop": {
+      "gtfsId": "F:A",
+      "entrances": null
+    }
+  }
+}

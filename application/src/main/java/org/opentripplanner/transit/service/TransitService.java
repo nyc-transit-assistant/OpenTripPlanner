@@ -151,6 +151,11 @@ public interface TransitService {
   Entrance getEntrance(FeedScopedId id);
 
   /**
+   * Return all entrances whose parent station is the given station.
+   */
+  Collection<Entrance> findEntrances(Station station);
+
+  /**
    * Gets the area stop with the given id and throws an exception if it was not found.
    */
   AreaStop getAreaStop(FeedScopedId id);

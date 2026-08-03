@@ -3,6 +3,7 @@ package org.opentripplanner.transit.service;
 import jakarta.inject.Inject;
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -256,6 +257,19 @@ public class SiteRepository implements Serializable {
 
   public Collection<Entrance> listEntrances() {
     return entrancesById.values();
+  }
+
+  /**
+   * Return all entrances whose parent station is the given station, ordered by id. The result is
+   * not cached, the entrance collection is scanned on every call.
+   */
+  public Collection<Entrance> findEntrances(Station station) {
+    return entrancesById
+      .values()
+      .stream()
+      .filter(entrance -> station.equals(entrance.getParentStation()))
+      .sorted(Comparator.comparing(entrance -> entrance.getId().toString()))
+      .toList();
   }
 
   /**

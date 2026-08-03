@@ -364,6 +364,10 @@ public class GraphQLDataFetchers {
   /** Station entrance or exit, originating from OSM or GTFS data. */
   public interface GraphQLEntrance {
     public DataFetcher<String> entranceId();
+    // lat/lon manually added for the NYC fork's entrance coordinates; regenerate-and-diff
+    // when the pinned graphql-codegen version is realigned with these checked-in files.
+    public DataFetcher<Double> lat();
+    public DataFetcher<Double> lon();
     public DataFetcher<String> name();
     public DataFetcher<String> publicCode();
     public DataFetcher<
@@ -911,6 +915,9 @@ public class GraphQLDataFetchers {
     public DataFetcher<String> code();
     public DataFetcher<String> desc();
     public DataFetcher<String> direction();
+    // Manually added for the NYC fork's `entrances` schema field; regenerate-and-diff
+    // when the pinned graphql-codegen version is realigned with these checked-in files.
+    public DataFetcher<Iterable<org.opentripplanner.transit.model.site.Entrance>> entrances();
     public DataFetcher<Object> geometries();
     public DataFetcher<String> gtfsId();
     public DataFetcher<graphql.relay.Relay.ResolvedGlobalId> id();
