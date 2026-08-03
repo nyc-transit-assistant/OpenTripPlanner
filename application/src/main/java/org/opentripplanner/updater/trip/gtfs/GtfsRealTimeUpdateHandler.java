@@ -148,7 +148,7 @@ public class GtfsRealTimeUpdateHandler {
     // with their last observed times. Lifecycle is free: when the trip leaves the feed
     // entirely, the clear drops it and nothing is harvested next cycle.
     Map<TripIdAndServiceDate, List<PastStop>> pastStopsByTrip = updateIncrementality == FULL_DATASET
-      ? harvestRealTimeAddedTripStops(feedIds)
+      ? harvestRealTimeTripStops(feedIds, updates)
       : Map.of();
 
     if (updateIncrementality == FULL_DATASET) {
@@ -550,40 +550,87 @@ public class GtfsRealTimeUpdateHandler {
    * pre-clear buffer is the previous cycle's state and the only place a NEW trip's already
    * departed stops still exist.
    */
-  private Map<TripIdAndServiceDate, List<PastStop>> harvestRealTimeAddedTripStops(
-    List<String> feedIds
+  private Map<TripIdAndServiceDate, List<PastStop>> harvestRealTimeTripStops(
+    List<String> feedIds,
+    List<GtfsRealtime.TripUpdate> updates
   ) {
     Map<TripIdAndServiceDate, List<PastStop>> out = new HashMap<>();
+    // Realtime-added (NEW/ADDED) trips are enumerable directly.
     for (var tripOnServiceDate : buffer.listRealTimeAddedTripOnServiceDate()) {
       Trip trip = tripOnServiceDate.getTrip();
       if (!feedIds.contains(trip.getId().getFeedId())) {
         continue;
       }
       var pattern = buffer.getRealTimeAddedPatternForTrip(trip);
-      if (pattern == null) {
+      harvestTrip(out, trip.getId(), tripOnServiceDate.getServiceDate(), pattern);
+    }
+    // REPLACEMENT trips (including scheduled trips this handler rewrites to REPLACEMENT on
+    // stop-pattern divergence) register as modified-trip patterns, which have no enumeration
+    // API — probe the trips of the incoming batch instead.
+    for (var update : updates) {
+      if (!update.hasTrip() || !update.getTrip().hasTripId()) {
         continue;
       }
-      var serviceDate = tripOnServiceDate.getServiceDate();
-      var timetable = buffer.resolve(pattern, serviceDate);
-      var tripTimes = timetable.getTripTimes(trip.getId());
-      if (tripTimes == null) {
+      var descriptor = update.getTrip();
+      if (descriptor.getTripId().isBlank()) {
+        // Invalid updates are rejected downstream, one update at a time.
         continue;
       }
-      long midnight = ServiceDateUtils.asStartOfService(serviceDate, timeZone).toEpochSecond();
-      int n = pattern.numberOfStops();
-      List<PastStop> stops = new ArrayList<>(n);
-      for (int i = 0; i < n; i++) {
-        stops.add(
-          new PastStop(
-            pattern.getStop(i),
-            midnight + tripTimes.getArrivalTime(i),
-            midnight + tripTimes.getDepartureTime(i)
-          )
+      LocalDate serviceDate;
+      try {
+        serviceDate = descriptor.hasStartDate()
+          ? LocalDate.parse(
+              descriptor.getStartDate(),
+              java.time.format.DateTimeFormatter.BASIC_ISO_DATE
+            )
+          : localDateNow.get();
+      } catch (java.time.format.DateTimeParseException e) {
+        continue;
+      }
+      for (String feedId : feedIds) {
+        var tripId = new FeedScopedId(feedId, descriptor.getTripId());
+        var key = new TripIdAndServiceDate(tripId, serviceDate);
+        if (out.containsKey(key)) {
+          continue;
+        }
+        harvestTrip(
+          out,
+          tripId,
+          serviceDate,
+          buffer.getNewTripPatternForModifiedTrip(tripId, serviceDate)
         );
       }
-      out.put(new TripIdAndServiceDate(trip.getId(), serviceDate), stops);
     }
     return out;
+  }
+
+  private void harvestTrip(
+    Map<TripIdAndServiceDate, List<PastStop>> out,
+    FeedScopedId tripId,
+    LocalDate serviceDate,
+    @Nullable org.opentripplanner.transit.model.network.TripPattern pattern
+  ) {
+    if (pattern == null) {
+      return;
+    }
+    var timetable = buffer.resolve(pattern, serviceDate);
+    var tripTimes = timetable.getTripTimes(tripId);
+    if (tripTimes == null) {
+      return;
+    }
+    long midnight = ServiceDateUtils.asStartOfService(serviceDate, timeZone).toEpochSecond();
+    int n = pattern.numberOfStops();
+    List<PastStop> stops = new ArrayList<>(n);
+    for (int i = 0; i < n; i++) {
+      stops.add(
+        new PastStop(
+          pattern.getStop(i),
+          midnight + tripTimes.getArrivalTime(i),
+          midnight + tripTimes.getDepartureTime(i)
+        )
+      );
+    }
+    out.put(new TripIdAndServiceDate(tripId, serviceDate), stops);
   }
 
   private UpdateSuccess applyUpdate(
@@ -609,7 +656,7 @@ public class GtfsRealTimeUpdateHandler {
       case CANCELED -> canceledTripHandler.cancel(tripUpdate, updateIncrementality);
       case DELETED -> canceledTripHandler.delete(tripUpdate, updateIncrementality);
       case DUPLICATED -> duplicatedTripHandler.handleDuplicated(tripUpdate, updateIncrementality);
-      case REPLACEMENT -> addedTripHandler.handleReplacement(tripUpdate);
+      case REPLACEMENT -> addedTripHandler.handleReplacement(tripUpdate, pastStops);
       case UNSCHEDULED -> throw UpdateException.of(
         tripUpdate.tripId(),
         NOT_IMPLEMENTED_UNSCHEDULED

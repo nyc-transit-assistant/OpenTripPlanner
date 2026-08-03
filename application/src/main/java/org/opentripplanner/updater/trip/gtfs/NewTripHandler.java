@@ -96,7 +96,8 @@ class NewTripHandler {
   /**
    * Validate and handle GTFS-RT TripUpdate message containing a REPLACEMENT trip.
    */
-  UpdateSuccess handleReplacement(TripUpdate tripUpdate) throws UpdateException {
+  UpdateSuccess handleReplacement(TripUpdate tripUpdate, @Nullable List<PastStop> pastStops)
+    throws UpdateException {
     Trip trip = transitEditorService.getTrip(tripUpdate.tripId());
 
     if (trip == null) {
@@ -111,7 +112,7 @@ class NewTripHandler {
       throw UpdateException.of(tripUpdate.tripId(), NO_SERVICE_ON_DATE);
     }
 
-    return handleNewOrReplacementTrip(trip, tripUpdate, null, false, true, false);
+    return handleNewOrReplacementTrip(trip, tripUpdate, pastStops, false, true, false);
   }
 
   /**

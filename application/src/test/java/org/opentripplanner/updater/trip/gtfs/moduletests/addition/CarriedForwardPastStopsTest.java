@@ -4,6 +4,7 @@ import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRe
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.opentripplanner.updater.spi.UpdateResultAssertions.assertSuccess;
 
+import com.google.transit.realtime.GtfsRealtime;
 import org.junit.jupiter.api.Test;
 import org.opentripplanner.transit.model.TransitTestEnvironment;
 import org.opentripplanner.transit.model.TransitTestEnvironmentBuilder;
@@ -100,6 +101,31 @@ class CarriedForwardPastStopsTest implements RealtimeTestConstants {
     assertEquals(
       "A U | A 10:10 10:10 | B 10:21 10:21 | C 10:32 10:32 | D 10:42 10:42",
       env.tripData(ADDED_TRIP_ID).showTimetable()
+    );
+  }
+
+  @Test
+  void carriesDepartedStopsForwardForReplacementTrips() {
+    // The R-train weekend scenario: a scheduled trip whose realtime pattern diverges is
+    // handled as REPLACEMENT — its pattern must not erode as stops roll out of the feed.
+    var first = rt
+      .tripUpdate(TRIP_1_ID, GtfsRealtime.TripDescriptor.ScheduleRelationship.REPLACEMENT)
+      .addStopTime(STOP_A_ID, "12:01")
+      .addStopTime(STOP_B_ID, "12:11")
+      .addStopTime(STOP_D_ID, "12:21")
+      .build();
+    assertSuccess(rt.applyTripUpdate(first));
+
+    var second = rt
+      .tripUpdate(TRIP_1_ID, GtfsRealtime.TripDescriptor.ScheduleRelationship.REPLACEMENT)
+      .addStopTime(STOP_B_ID, "12:12")
+      .addStopTime(STOP_D_ID, "12:22")
+      .build();
+    assertSuccess(rt.applyTripUpdate(second));
+
+    assertEquals(
+      "P U | A 12:01 12:01 | B 12:12 12:12 | D 12:22 12:22",
+      env.tripData(TRIP_1_ID).showTimetable()
     );
   }
 
