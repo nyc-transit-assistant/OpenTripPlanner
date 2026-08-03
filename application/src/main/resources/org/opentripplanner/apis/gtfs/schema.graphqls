@@ -136,6 +136,13 @@ type Agency implements Node {
 "Alert of a current or upcoming disruption in public transportation"
 type Alert implements Node {
   """
+  The time windows during which this alert is in effect, as published by the agency. An alert
+  may carry several disjoint windows (e.g. one per game day for a stadium service notice);
+  `effectiveStartDate`/`effectiveEndDate` are only the envelope of these windows (earliest
+  start, latest end).
+  """
+  activePeriods: [AlertActivePeriod!]
+  """
   Agency affected by the disruption. Note that this value is present only if the
   disruption has an effect on all operations of the agency (e.g. in case of a strike).
   """
@@ -169,13 +176,6 @@ type Alert implements Node {
   ): String
   "Url with more information in all different available languages"
   alertUrlTranslations: [TranslatedString!]! @deprecated(reason : "Use `alertUrl` instead. `accept-language` header can be used for translations or the `language` parameter on the `alertUrl` field.")
-  """
-  The time windows during which this alert is in effect, as published by the agency. An alert
-  may carry several disjoint windows (e.g. one per game day for a stadium service notice);
-  `effectiveStartDate`/`effectiveEndDate` are only the envelope of these windows (earliest
-  start, latest end).
-  """
-  activePeriods: [AlertActivePeriod!]
   "Time when this alert is not in effect anymore. Format: Unix timestamp in seconds"
   effectiveEndDate: Long
   "Time when this alert comes into effect. Format: Unix timestamp in seconds"

@@ -933,7 +933,9 @@ Ordered list of `StreetMode` values used as egress modes. Each entry is paired w
       "type" : "real-time-alerts",
       "frequency" : "30s",
       "url" : "http://developer.trimet.org/ws/V1/FeedSpecAlerts/appID/0123456789ABCDEF",
-      "feedId" : "TriMet",
+      "feedIds" : [
+        "TriMet"
+      ],
       "headers" : {
         "Some-Header" : "A-Value"
       }
@@ -994,7 +996,9 @@ Ordered list of `StreetMode` values used as egress modes. Each entry is paired w
       "frequency" : "1m",
       "backwardsDelayPropagationType" : "REQUIRED_NO_DATA",
       "url" : "http://developer.trimet.org/ws/V1/TripUpdate/appID/0123456789ABCDEF",
-      "feedId" : "TriMet",
+      "feedIds" : [
+        "TriMet"
+      ],
       "headers" : {
         "Authorization" : "A-Token"
       }
@@ -1003,13 +1007,17 @@ Ordered list of `StreetMode` values used as egress modes. Each entry is paired w
       "type" : "mqtt-gtfs-rt-updater",
       "url" : "tcp://pred.rt.hsl.fi",
       "topic" : "gtfsrt/v2/fi/hsl/tu",
-      "feedId" : "HSL",
+      "feedIds" : [
+        "HSL"
+      ],
       "fuzzyTripMatching" : true
     },
     {
       "type" : "vehicle-positions",
       "url" : "https://s3.amazonaws.com/kcm-alerts-realtime-prod/vehiclepositions.pb",
-      "feedId" : "1",
+      "feedIds" : [
+        "1"
+      ],
       "frequency" : "1m",
       "headers" : {
         "Header-Name" : "Header-Value"

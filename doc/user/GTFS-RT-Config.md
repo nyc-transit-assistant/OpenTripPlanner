@@ -73,7 +73,9 @@ HTTP headers to add to the request. Any header key, value can be inserted.
       "type" : "real-time-alerts",
       "frequency" : "30s",
       "url" : "http://developer.trimet.org/ws/V1/FeedSpecAlerts/appID/0123456789ABCDEF",
-      "feedId" : "TriMet",
+      "feedIds" : [
+        "TriMet"
+      ],
       "headers" : {
         "Some-Header" : "A-Value"
       }
@@ -93,18 +95,19 @@ HTTP request and polled regularly.
 <!-- stop-time-updater BEGIN -->
 <!-- NOTE! This section is auto-generated. Do not change, change doc in code instead. -->
 
-| Config Parameter                                                      |       Type      | Summary                                                                       |  Req./Opt. | Default Value        | Since |
-|-----------------------------------------------------------------------|:---------------:|-------------------------------------------------------------------------------|:----------:|----------------------|:-----:|
-| type = "stop-time-updater"                                            |      `enum`     | The type of the updater.                                                      | *Required* |                      |  1.5  |
-| [backwardsDelayPropagationType](#u__5__backwardsDelayPropagationType) |      `enum`     | How backwards propagation should be handled.                                  | *Optional* | `"required-no-data"` |  2.2  |
-| [feedId](#u__5__feedId)                                               |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to. | *Optional* |                      |  1.5  |
-| [forwardsDelayPropagationType](#u__5__forwardsDelayPropagationType)   |      `enum`     | How forwards propagation should be handled.                                   | *Optional* | `"default"`          |  2.8  |
-| frequency                                                             |    `duration`   | How often the data should be downloaded.                                      | *Optional* | `"PT1M"`             |  1.5  |
-| fuzzyTripMatching                                                     |    `boolean`    | If the trips should be matched fuzzily.                                       | *Optional* | `false`              |  1.5  |
-| [partialTripIdMatching](#u__5__partialTripIdMatching)                 |    `boolean`    | Resolve realtime trip ids that are a suffix of the static GTFS trip id.       | *Optional* | `false`              |  2.9  |
-| [url](#u__5__url)                                                     |     `string`    | The URL of the GTFS-RT resource.                                              | *Required* |                      |  1.5  |
-| [feedIds](#u__5__feedIds)                                             |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.             | *Optional* |                      |  2.9  |
-| [headers](#u__5__headers)                                             | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.    | *Optional* |                      |  2.3  |
+| Config Parameter                                                      |       Type      | Summary                                                                               |  Req./Opt. | Default Value        | Since |
+|-----------------------------------------------------------------------|:---------------:|---------------------------------------------------------------------------------------|:----------:|----------------------|:-----:|
+| type = "stop-time-updater"                                            |      `enum`     | The type of the updater.                                                              | *Required* |                      |  1.5  |
+| [backwardsDelayPropagationType](#u__5__backwardsDelayPropagationType) |      `enum`     | How backwards propagation should be handled.                                          | *Optional* | `"required-no-data"` |  2.2  |
+| [feedId](#u__5__feedId)                                               |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to.         | *Optional* |                      |  1.5  |
+| [forwardsDelayPropagationType](#u__5__forwardsDelayPropagationType)   |      `enum`     | How forwards propagation should be handled.                                           | *Optional* | `"default"`          |  2.8  |
+| frequency                                                             |    `duration`   | How often the data should be downloaded.                                              | *Optional* | `"PT1M"`             |  1.5  |
+| fuzzyTripMatching                                                     |    `boolean`    | If the trips should be matched fuzzily.                                               | *Optional* | `false`              |  1.5  |
+| [partialTripIdMatching](#u__5__partialTripIdMatching)                 |    `boolean`    | Resolve realtime trip ids that are a suffix of the static GTFS trip id.               | *Optional* | `false`              |  2.9  |
+| [scopedFullDatasetClear](#u__5__scopedFullDatasetClear)               |    `boolean`    | Never clear the whole feed on FULL_DATASET updates; clear only this updater's routes. | *Optional* | `false`              |  2.9  |
+| [url](#u__5__url)                                                     |     `string`    | The URL of the GTFS-RT resource.                                                      | *Required* |                      |  1.5  |
+| [feedIds](#u__5__feedIds)                                             |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.                     | *Optional* |                      |  2.9  |
+| [headers](#u__5__headers)                                             | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.            | *Optional* |                      |  2.3  |
 
 
 ##### Parameter details
@@ -141,7 +144,7 @@ Equivalent to specifying a one-element `feedIds` list. Retained for backwards co
 
 **Since version:** `2.8` ∙ **Type:** `enum` ∙ **Cardinality:** `Optional` ∙ **Default value:** `"default"`   
 **Path:** /updaters/[5]   
-**Enum values:** `none` | `default`
+**Enum values:** `none` | `default` | `interpolate-contradictions` | `clamp-contradictions`
 
 How forwards propagation should be handled.
 
@@ -157,6 +160,20 @@ How forwards propagation should be handled.
    non-decreasing.
    For `SKIPPED` stops without time given, interpolate the estimated time using the ratio between
    scheduled and real times from the previous to the next stop.
+ - `interpolate-contradictions` Like `DEFAULT`, with one addition: when a run of stops without any realtime information is
+   followed by a provided time that contradicts plain forward propagation — the propagated
+   times would be later than the next stop's provided time — the run is filled by
+   interpolating between the surrounding provided times (the same treatment `DEFAULT` gives
+   explicitly `SKIPPED` stops) instead of rejecting the whole update as a negative hop.
+   Use this for feeds that silently omit skipped stops rather than marking them `SKIPPED`,
+   such as the NYC Subway feeds, where express runs otherwise lose all realtime.
+ - `clamp-contradictions` Like `INTERPOLATE_CONTRADICTIONS`, with a final safety net: after interpolation, any
+   remaining contradiction between two explicitly provided times — a negative hop or dwell
+   that interpolation cannot reach because both ends were given by the feed — is repaired by
+   clamping the offending time forward to the previous departure. The trip survives with a
+   degenerate zero-length hop instead of losing every prediction it carries. Repairs are
+   logged at debug level. Use for feeds that emit occasionally contradictory predictions
+   (mixed prediction sources) where discarding the whole trip is worse than a flattened hop.
 
 
 <h4 id="u__5__partialTripIdMatching">partialTripIdMatching</h4>
@@ -167,6 +184,15 @@ How forwards propagation should be handled.
 Resolve realtime trip ids that are a suffix of the static GTFS trip id.
 
 Some agencies (notably MTA New York City Subway) emit a realtime `trip_id` that is a suffix of the corresponding static GTFS `trip_id`. When enabled, the realtime id is matched against the static id by suffix, scoped to the same route and service date, before falling back to exact lookup.
+
+<h4 id="u__5__scopedFullDatasetClear">scopedFullDatasetClear</h4>
+
+**Since version:** `2.9` ∙ **Type:** `boolean` ∙ **Cardinality:** `Optional` ∙ **Default value:** `false`   
+**Path:** /updaters/[5] 
+
+Never clear the whole feed on FULL_DATASET updates; clear only this updater's routes.
+
+Set this on every updater when several realtime updaters share one static feed id (e.g. NYCT's per-line GTFS-RT URLs all writing to one subway feed). Each FULL_DATASET update then clears only the routes this updater is authoritative for — its declared trip replacement periods plus the routes present in the batch — instead of wiping data the sibling updaters just applied.
 
 <h4 id="u__5__url">url</h4>
 
@@ -206,7 +232,9 @@ HTTP headers to add to the request. Any header key, value can be inserted.
       "frequency" : "1m",
       "backwardsDelayPropagationType" : "REQUIRED_NO_DATA",
       "url" : "http://developer.trimet.org/ws/V1/TripUpdate/appID/0123456789ABCDEF",
-      "feedId" : "TriMet",
+      "feedIds" : [
+        "TriMet"
+      ],
       "headers" : {
         "Authorization" : "A-Token"
       }
@@ -277,7 +305,7 @@ Equivalent to specifying a one-element `feedIds` list. Retained for backwards co
 
 **Since version:** `2.8` ∙ **Type:** `enum` ∙ **Cardinality:** `Optional` ∙ **Default value:** `"default"`   
 **Path:** /updaters/[6]   
-**Enum values:** `none` | `default`
+**Enum values:** `none` | `default` | `interpolate-contradictions` | `clamp-contradictions`
 
 How forwards propagation should be handled.
 
@@ -293,6 +321,20 @@ How forwards propagation should be handled.
    non-decreasing.
    For `SKIPPED` stops without time given, interpolate the estimated time using the ratio between
    scheduled and real times from the previous to the next stop.
+ - `interpolate-contradictions` Like `DEFAULT`, with one addition: when a run of stops without any realtime information is
+   followed by a provided time that contradicts plain forward propagation — the propagated
+   times would be later than the next stop's provided time — the run is filled by
+   interpolating between the surrounding provided times (the same treatment `DEFAULT` gives
+   explicitly `SKIPPED` stops) instead of rejecting the whole update as a negative hop.
+   Use this for feeds that silently omit skipped stops rather than marking them `SKIPPED`,
+   such as the NYC Subway feeds, where express runs otherwise lose all realtime.
+ - `clamp-contradictions` Like `INTERPOLATE_CONTRADICTIONS`, with a final safety net: after interpolation, any
+   remaining contradiction between two explicitly provided times — a negative hop or dwell
+   that interpolation cannot reach because both ends were given by the feed — is repaired by
+   clamping the offending time forward to the previous departure. The trip survives with a
+   degenerate zero-length hop instead of losing every prediction it carries. Repairs are
+   logged at debug level. Use for feeds that emit occasionally contradictory predictions
+   (mixed prediction sources) where discarding the whole trip is worse than a flattened hop.
 
 
 <h4 id="u__6__partialTripIdMatching">partialTripIdMatching</h4>
@@ -325,7 +367,9 @@ A single GTFS-RT feed may be applied to multiple static GTFS feeds; each real-ti
       "type" : "mqtt-gtfs-rt-updater",
       "url" : "tcp://pred.rt.hsl.fi",
       "topic" : "gtfsrt/v2/fi/hsl/tu",
-      "feedId" : "HSL",
+      "feedIds" : [
+        "HSL"
+      ],
       "fuzzyTripMatching" : true
     }
   ]
@@ -401,7 +445,9 @@ HTTP headers to add to the request. Any header key, value can be inserted.
     {
       "type" : "vehicle-positions",
       "url" : "https://s3.amazonaws.com/kcm-alerts-realtime-prod/vehiclepositions.pb",
-      "feedId" : "1",
+      "feedIds" : [
+        "1"
+      ],
       "frequency" : "1m",
       "headers" : {
         "Header-Name" : "Header-Value"
