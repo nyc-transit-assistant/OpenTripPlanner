@@ -1,0 +1,79 @@
+name: NYC Fork CI
+
+# CI for the nyc-transit-assistant fork's rebased branches (nyc/**).
+#
+# This intentionally lives in its own file instead of modifying cibuild.yml so rebases onto
+# upstream dev-2.x never conflict. It runs the subset of upstream's CI that works without
+# access to the OpenTripPlanner org's infrastructure:
+#   - unit tests + prettier/checkstyle (same as upstream's build-linux job)
+#   - packaging the shaded jar as a smoke check
+#   - the integration-tagged tests (they only need outbound internet, no org secrets)
+#
+# Deliberately NOT included (needs OTP org infra):
+#   - codecov upload (CODECOV_TOKEN), docs deploy + changelog bot (CHANGELOG_TOKEN),
+#     Dockerhub image push (DOCKERHUB_PASSWORD), performance tests (self-hosted
+#     'performance-test' runners), GitHub Package Registry deploy.
+
+on:
+  push:
+    branches:
+      - "nyc/**"
+  pull_request:
+    branches:
+      - "nyc/**"
+
+env:
+  # maven default arguments to make the log quieter and colourful
+  MAVEN_ARGS: "--no-transfer-progress -Dstyle.color=always"
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # fetch-depth: 0 fetches all tags, which the build uses for auto-versioning
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # nodejs is preinstalled so the prettier maven plugin doesn't have to download it,
+      # which frequently times out (same workaround as upstream cibuild.yml)
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: 25
+          distribution: temurin
+          cache: maven
+
+      - name: Run unit tests, then package
+        # split into two steps because otherwise maven keeps long-running HTTP connections
+        # to Maven Central open which then hang during the package phase behind the
+        # GitHub Actions NAT (see upstream cibuild.yml)
+        run: |
+          mvn test -P prettierCheck -Dprettier.nodePath=node -Dprettier.npmPath=npm
+          mvn package -Dmaven.test.skip -P prettierSkip,checkstyleSkip
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The integration-tagged tests hit live third-party endpoints (Entur API, Google Cloud
+    # Storage, S3), so an external outage can fail them through no fault of the change under
+    # test. Don't let that block the branch; failures still show up in the job log and
+    # annotations.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: 25
+          distribution: temurin
+          cache: maven
+
+      - name: Run integration tests
+        run: mvn test -P integrationTests
