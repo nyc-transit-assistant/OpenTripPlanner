@@ -84,6 +84,37 @@ public class GtfsRealtimePartialTripIdMatcher {
    * @return a possibly rewritten {@code TripDescriptor} — same instance if no match was found,
    *         a new builder copy with the full trip id otherwise.
    */
+  /**
+   * Same resolution as {@link #match} but without touching the diagnostic counters — for
+   * lookups outside the main per-update flow (the pre-clear carry-forward harvest), so the
+   * logged counters keep meaning \"one call per update\". The apply path is single-threaded
+   * (updates are serialized onto the graph writer), so save/restore is safe.
+   */
+  public TripDescriptor matchQuietly(String feedId, TripDescriptor trip) {
+    int c = callCount;
+    int m = matchedCount;
+    int v = matchedByVariantSuffixCount;
+    int mf = missingFieldsCount;
+    int ar = alreadyResolvedCount;
+    int pf = parseStartDateFailedCount;
+    int rn = routeNotFoundCount;
+    int nc = noCandidatesCount;
+    int ns = candidatesButNoActiveServiceCount;
+    try {
+      return match(feedId, trip);
+    } finally {
+      callCount = c;
+      matchedCount = m;
+      matchedByVariantSuffixCount = v;
+      missingFieldsCount = mf;
+      alreadyResolvedCount = ar;
+      parseStartDateFailedCount = pf;
+      routeNotFoundCount = rn;
+      noCandidatesCount = nc;
+      candidatesButNoActiveServiceCount = ns;
+    }
+  }
+
   public TripDescriptor match(String feedId, TripDescriptor trip) {
     callCount++;
     if (!trip.hasTripId() || !trip.hasRouteId() || !trip.hasStartDate()) {

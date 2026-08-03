@@ -148,7 +148,7 @@ public class GtfsRealTimeUpdateHandler {
     // with their last observed times. Lifecycle is free: when the trip leaves the feed
     // entirely, the clear drops it and nothing is harvested next cycle.
     Map<TripIdAndServiceDate, List<PastStop>> pastStopsByTrip = updateIncrementality == FULL_DATASET
-      ? harvestRealTimeTripStops(feedIds, updates)
+      ? harvestRealTimeTripStops(feedIds, updates, partialTripIdMatcher)
       : Map.of();
 
     if (updateIncrementality == FULL_DATASET) {
@@ -552,7 +552,8 @@ public class GtfsRealTimeUpdateHandler {
    */
   private Map<TripIdAndServiceDate, List<PastStop>> harvestRealTimeTripStops(
     List<String> feedIds,
-    List<GtfsRealtime.TripUpdate> updates
+    List<GtfsRealtime.TripUpdate> updates,
+    @Nullable GtfsRealtimePartialTripIdMatcher partialTripIdMatcher
   ) {
     Map<TripIdAndServiceDate, List<PastStop>> out = new HashMap<>();
     // Realtime-added (NEW/ADDED) trips are enumerable directly.
@@ -588,17 +589,29 @@ public class GtfsRealTimeUpdateHandler {
         continue;
       }
       for (String feedId : feedIds) {
-        var tripId = new FeedScopedId(feedId, descriptor.getTripId());
-        var key = new TripIdAndServiceDate(tripId, serviceDate);
-        if (out.containsKey(key)) {
-          continue;
+        // The modified-trip registry is keyed by the RESOLVED (static) trip id, but the raw
+        // batch carries the producer's suffix ids (NYCT) — resolve the same way the main
+        // loop will, without disturbing the matcher's diagnostic counters.
+        var resolvedId = descriptor.getTripId();
+        if (partialTripIdMatcher != null) {
+          resolvedId = partialTripIdMatcher.matchQuietly(feedId, descriptor).getTripId();
         }
-        harvestTrip(
-          out,
-          tripId,
-          serviceDate,
-          buffer.getNewTripPatternForModifiedTrip(tripId, serviceDate)
-        );
+        var candidateIds = resolvedId.equals(descriptor.getTripId())
+          ? List.of(descriptor.getTripId())
+          : List.of(descriptor.getTripId(), resolvedId);
+        for (var idValue : candidateIds) {
+          var tripId = new FeedScopedId(feedId, idValue);
+          var key = new TripIdAndServiceDate(tripId, serviceDate);
+          if (out.containsKey(key)) {
+            continue;
+          }
+          harvestTrip(
+            out,
+            tripId,
+            serviceDate,
+            buffer.getNewTripPatternForModifiedTrip(tripId, serviceDate)
+          );
+        }
       }
     }
     return out;
