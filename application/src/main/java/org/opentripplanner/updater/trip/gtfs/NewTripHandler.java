@@ -6,11 +6,13 @@ import static org.opentripplanner.updater.spi.UpdateErrorType.TOO_FEW_STOPS;
 import static org.opentripplanner.updater.spi.UpdateErrorType.TRIP_ALREADY_EXISTS;
 import static org.opentripplanner.updater.spi.UpdateErrorType.TRIP_NOT_FOUND;
 
+import com.google.transit.realtime.GtfsRealtime;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import javax.annotation.Nullable;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transit.model.network.StopPattern;
 import org.opentripplanner.transit.model.network.TripPattern;
@@ -23,6 +25,7 @@ import org.opentripplanner.transit.service.TransitEditorService;
 import org.opentripplanner.updater.spi.UpdateException;
 import org.opentripplanner.updater.spi.UpdateSuccess;
 import org.opentripplanner.updater.trip.TripUpdateApplier;
+import org.opentripplanner.updater.trip.gtfs.model.StopTimeUpdate;
 import org.opentripplanner.updater.trip.gtfs.model.TripUpdate;
 import org.opentripplanner.updater.trip.patterncache.TripPatternCache;
 
@@ -52,8 +55,14 @@ class NewTripHandler {
 
   /**
    * Validate and handle GTFS-RT TripUpdate message containing a NEW trip.
+   *
+   * @param pastStops the trip's stops with their last observed times, harvested from the
+   *                  pre-clear buffer (i.e. the previous update cycle), or null. Stops the
+   *                  producer has already dropped from the feed are carried forward so the
+   *                  trip's history does not erode off the front of the pattern.
    */
-  UpdateSuccess handleNew(final TripUpdate tripUpdate) throws UpdateException {
+  UpdateSuccess handleNew(final TripUpdate tripUpdate, @Nullable List<PastStop> pastStops)
+    throws UpdateException {
     if (transitEditorService.getScheduledTrip(tripUpdate.tripId()) != null) {
       throw UpdateException.of(tripUpdate.tripId(), TRIP_ALREADY_EXISTS);
     }
@@ -74,7 +83,14 @@ class NewTripHandler {
 
     Trip trip = tripBuilder.build();
 
-    return handleNewOrReplacementTrip(trip, tripUpdate, true, false, result.newRouteCreated());
+    return handleNewOrReplacementTrip(
+      trip,
+      tripUpdate,
+      pastStops,
+      true,
+      false,
+      result.newRouteCreated()
+    );
   }
 
   /**
@@ -95,7 +111,7 @@ class NewTripHandler {
       throw UpdateException.of(tripUpdate.tripId(), NO_SERVICE_ON_DATE);
     }
 
-    return handleNewOrReplacementTrip(trip, tripUpdate, false, true, false);
+    return handleNewOrReplacementTrip(trip, tripUpdate, null, false, true, false);
   }
 
   /**
@@ -104,12 +120,16 @@ class NewTripHandler {
   private UpdateSuccess handleNewOrReplacementTrip(
     Trip trip,
     TripUpdate tripUpdate,
+    @Nullable List<PastStop> pastStops,
     boolean added,
     boolean modified,
     boolean hasANewRouteBeenCreated
   ) throws UpdateException {
     FeedScopedId tripId = trip.getId();
-    var stopAndStopTimeUpdates = matchStopsToStopTimeUpdates(tripUpdate);
+    var stopAndStopTimeUpdates = mergeCarriedForwardStops(
+      pastStops,
+      matchStopsToStopTimeUpdates(tripUpdate)
+    );
 
     var warnings = new ArrayList<UpdateSuccess.WarningType>(0);
 
@@ -176,6 +196,62 @@ class NewTripHandler {
         .withTripCreation(true);
     }
     return TripUpdateApplier.apply(buffer, builder.build());
+  }
+
+  /**
+   * Prepend stops the producer has dropped from the feed since the last cycle. The previous
+   * cycle's pattern prefix ending just before the current update's first stop is carried
+   * forward with its last observed times frozen as recorded times. All-or-nothing guards keep
+   * this conservative: if the current first stop is not in the previous pattern (a reroute),
+   * or any carried time would violate monotonicity against the current first stop, nothing is
+   * carried.
+   */
+  private List<StopAndStopTimeUpdate> mergeCarriedForwardStops(
+    @Nullable List<PastStop> pastStops,
+    List<StopAndStopTimeUpdate> current
+  ) {
+    if (pastStops == null || pastStops.isEmpty() || current.isEmpty()) {
+      return current;
+    }
+    var first = current.getFirst();
+    var firstStopId = first.stop().getId();
+    int firstIndexInPast = -1;
+    for (int i = 0; i < pastStops.size(); i++) {
+      if (pastStops.get(i).stop().getId().equals(firstStopId)) {
+        firstIndexInPast = i;
+        break;
+      }
+    }
+    if (firstIndexInPast <= 0) {
+      // 0: nothing has rolled off; -1: the pattern changed under us — carry nothing.
+      return current;
+    }
+    var firstUpdate = first.stopTimeUpdate();
+    var firstArrival = firstUpdate.scheduledArrivalTimeWithRealTimeFallback();
+    var firstDeparture = firstUpdate.scheduledDepartureTimeWithRealTimeFallback();
+    long firstTime = firstArrival.orElse(firstDeparture.orElse(Long.MIN_VALUE));
+    if (firstTime == Long.MIN_VALUE) {
+      // Delay-only first stop: no absolute time to guard monotonicity against.
+      return current;
+    }
+    var merged = new ArrayList<StopAndStopTimeUpdate>(firstIndexInPast + current.size());
+    for (int i = 0; i < firstIndexInPast; i++) {
+      var past = pastStops.get(i);
+      if (past.departureEpoch() > firstTime) {
+        // A carried time would not precede the current first stop — carry nothing.
+        return current;
+      }
+      var update = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
+        .setStopId(past.stop().getId().getId())
+        .setArrival(GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder().setTime(past.arrivalEpoch()))
+        .setDeparture(
+          GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder().setTime(past.departureEpoch())
+        )
+        .build();
+      merged.add(new StopAndStopTimeUpdate(past.stop(), new StopTimeUpdate(update)));
+    }
+    merged.addAll(current);
+    return merged;
   }
 
   /**

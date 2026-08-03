@@ -71,6 +71,7 @@ public class GtfsRealTimeTripUpdateAdapter {
       editorService,
       localDateNow,
       instantNow,
+      timetableRepository.getTimeZone(),
       new ScheduledTripHandler(editorService, buffer, tripTimesUpdater, tripPatternCache),
       new NewTripHandler(editorService, buffer, tripTimesUpdater, tripPatternCache),
       new CanceledTripHandler(editorService, buffer),

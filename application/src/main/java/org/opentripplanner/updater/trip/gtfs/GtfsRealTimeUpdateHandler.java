@@ -6,9 +6,12 @@ import static org.opentripplanner.updater.trip.UpdateIncrementality.FULL_DATASET
 import com.google.transit.realtime.GtfsRealtime;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -17,6 +20,7 @@ import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transit.model.framework.DataValidationException;
 import org.opentripplanner.transit.model.timetable.RealTimeTripUpdate;
 import org.opentripplanner.transit.model.timetable.Trip;
+import org.opentripplanner.transit.model.timetable.TripIdAndServiceDate;
 import org.opentripplanner.transit.repository.MutableTimetableSnapshot;
 import org.opentripplanner.transit.service.TransitEditorService;
 import org.opentripplanner.updater.spi.DataValidationExceptionMapper;
@@ -47,6 +51,7 @@ public class GtfsRealTimeUpdateHandler {
   private final TransitEditorService transitEditorService;
   private final Supplier<LocalDate> localDateNow;
   private final Supplier<Instant> instantNow;
+  private final ZoneId timeZone;
   private final ScheduledTripHandler scheduledTripHandler;
   private final NewTripHandler addedTripHandler;
   private final CanceledTripHandler canceledTripHandler;
@@ -57,6 +62,7 @@ public class GtfsRealTimeUpdateHandler {
     TransitEditorService transitEditorService,
     Supplier<LocalDate> localDateNow,
     Supplier<Instant> instantNow,
+    ZoneId timeZone,
     ScheduledTripHandler scheduledTripHandler,
     NewTripHandler addedTripHandler,
     CanceledTripHandler canceledTripHandler,
@@ -66,6 +72,7 @@ public class GtfsRealTimeUpdateHandler {
     this.transitEditorService = transitEditorService;
     this.localDateNow = localDateNow;
     this.instantNow = instantNow;
+    this.timeZone = timeZone;
     this.scheduledTripHandler = scheduledTripHandler;
     this.addedTripHandler = addedTripHandler;
     this.canceledTripHandler = canceledTripHandler;
@@ -133,6 +140,16 @@ public class GtfsRealTimeUpdateHandler {
       }
     }
     Set<String> unresolvedRouteIds = new HashSet<>();
+
+    // Snapshot realtime-added trip state before any clear: producers such as NYCT drop a
+    // stop's update once the vehicle departs it, so a NEW trip rebuilt from the current
+    // message alone erodes from the front every cycle. The pre-clear buffer is the last
+    // cycle's state — harvest it so NewTripHandler can carry the departed stops forward
+    // with their last observed times. Lifecycle is free: when the trip leaves the feed
+    // entirely, the clear drops it and nothing is harvested next cycle.
+    Map<TripIdAndServiceDate, List<PastStop>> pastStopsByTrip = updateIncrementality == FULL_DATASET
+      ? harvestRealTimeAddedTripStops(feedIds)
+      : Map.of();
 
     if (updateIncrementality == FULL_DATASET) {
       if (scopedFullDatasetClear) {
@@ -292,7 +309,8 @@ public class GtfsRealTimeUpdateHandler {
           tripUpdate,
           updateIncrementality,
           backwardsDelayPropagationType,
-          forwardsDelayPropagationType
+          forwardsDelayPropagationType,
+          pastStopsByTrip.get(new TripIdAndServiceDate(tripUpdate.tripId(), tripUpdate.startDate()))
         );
         successes.add(result);
       } catch (DataValidationException e) {
@@ -526,11 +544,54 @@ public class GtfsRealTimeUpdateHandler {
     return feedIds.getFirst();
   }
 
+  /**
+   * Capture every realtime-added trip's stops with their last observed times, keyed by trip and
+   * service date. Must run against the buffer <em>before</em> the FULL_DATASET clear — the
+   * pre-clear buffer is the previous cycle's state and the only place a NEW trip's already
+   * departed stops still exist.
+   */
+  private Map<TripIdAndServiceDate, List<PastStop>> harvestRealTimeAddedTripStops(
+    List<String> feedIds
+  ) {
+    Map<TripIdAndServiceDate, List<PastStop>> out = new HashMap<>();
+    for (var tripOnServiceDate : buffer.listRealTimeAddedTripOnServiceDate()) {
+      Trip trip = tripOnServiceDate.getTrip();
+      if (!feedIds.contains(trip.getId().getFeedId())) {
+        continue;
+      }
+      var pattern = buffer.getRealTimeAddedPatternForTrip(trip);
+      if (pattern == null) {
+        continue;
+      }
+      var serviceDate = tripOnServiceDate.getServiceDate();
+      var timetable = buffer.resolve(pattern, serviceDate);
+      var tripTimes = timetable.getTripTimes(trip.getId());
+      if (tripTimes == null) {
+        continue;
+      }
+      long midnight = ServiceDateUtils.asStartOfService(serviceDate, timeZone).toEpochSecond();
+      int n = pattern.numberOfStops();
+      List<PastStop> stops = new ArrayList<>(n);
+      for (int i = 0; i < n; i++) {
+        stops.add(
+          new PastStop(
+            pattern.getStop(i),
+            midnight + tripTimes.getArrivalTime(i),
+            midnight + tripTimes.getDepartureTime(i)
+          )
+        );
+      }
+      out.put(new TripIdAndServiceDate(trip.getId(), serviceDate), stops);
+    }
+    return out;
+  }
+
   private UpdateSuccess applyUpdate(
     TripUpdate tripUpdate,
     UpdateIncrementality updateIncrementality,
     BackwardsDelayPropagationType backwardsDelayPropagationType,
-    ForwardsDelayPropagationType forwardsDelayPropagationType
+    ForwardsDelayPropagationType forwardsDelayPropagationType,
+    @Nullable List<PastStop> pastStops
   ) throws UpdateException {
     // The GTFS-RT TripDescriptor.schedule_relationship field is a protobuf optional enum,
     // so a single TripUpdate message carries exactly one value — it is structurally impossible
@@ -544,7 +605,7 @@ public class GtfsRealTimeUpdateHandler {
         forwardsDelayPropagationType,
         backwardsDelayPropagationType
       );
-      case NEW, ADDED -> addedTripHandler.handleNew(tripUpdate);
+      case NEW, ADDED -> addedTripHandler.handleNew(tripUpdate, pastStops);
       case CANCELED -> canceledTripHandler.cancel(tripUpdate, updateIncrementality);
       case DELETED -> canceledTripHandler.delete(tripUpdate, updateIncrementality);
       case DUPLICATED -> duplicatedTripHandler.handleDuplicated(tripUpdate, updateIncrementality);
