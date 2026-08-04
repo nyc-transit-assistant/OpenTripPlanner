@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transit.model.network.Route;
@@ -56,6 +57,7 @@ public class GtfsRealtimePartialTripIdMatcher {
   public int candidatesButNoActiveServiceCount;
   public int matchedCount;
   public int matchedByVariantSuffixCount;
+  public int matchedOnAlternateDateCount;
 
   public GtfsRealtimePartialTripIdMatcher(TransitService transitService) {
     this.transitService = transitService;
@@ -63,10 +65,11 @@ public class GtfsRealtimePartialTripIdMatcher {
 
   public String summarizeCounters() {
     return String.format(
-      "calls=%d, matched=%d (variantSuffix=%d), missingFields=%d, alreadyResolved=%d, parseStartDateFailed=%d, routeNotFound=%d, noCandidates=%d, candidatesButNoActiveService=%d",
+      "calls=%d, matched=%d (variantSuffix=%d, alternateDate=%d), missingFields=%d, alreadyResolved=%d, parseStartDateFailed=%d, routeNotFound=%d, noCandidates=%d, candidatesButNoActiveService=%d",
       callCount,
       matchedCount,
       matchedByVariantSuffixCount,
+      matchedOnAlternateDateCount,
       missingFieldsCount,
       alreadyResolvedCount,
       parseStartDateFailedCount,
@@ -146,9 +149,6 @@ public class GtfsRealtimePartialTripIdMatcher {
       return trip;
     }
 
-    var serviceIdsOnDate = transitService
-      .getTripCalendars()
-      .listServiceIdsOnServiceDate(serviceDate);
     // The path separator's dot count is not stable between realtime and static ids: the SIR
     // realtime feed sends `116600_SI.N03R` while the active static schedule uses
     // `..._116600_SI..N03R` (and older supplement trips the single-dot form). Try the id as
@@ -169,17 +169,6 @@ public class GtfsRealtimePartialTripIdMatcher {
       .filter(t -> suffixes.stream().anyMatch(s -> t.getId().getId().endsWith(s)))
       .toList();
 
-    Trip match = exactCandidates
-      .stream()
-      .filter(t -> serviceIdsOnDate.contains(t.getServiceId()))
-      .findFirst()
-      .orElse(null);
-
-    if (match != null) {
-      matchedCount++;
-      return rewritten(trip, match, effectiveRouteId);
-    }
-
     // Fuzzy fallback: NYCT's L feed (and others) strips the route-variant suffix from the trip
     // id, sending e.g. `128650_L..S` while the static GTFS uses `..._128650_L..S01R`. Try
     // matching where the static id continues past the rt id with an alphanumeric variant
@@ -192,16 +181,52 @@ public class GtfsRealtimePartialTripIdMatcher {
       .stream()
       .filter(t -> variantPatterns.stream().anyMatch(p -> p.matcher(t.getId().getId()).matches()))
       .toList();
-    Trip fuzzyMatch = fuzzyCandidates
-      .stream()
-      .filter(t -> serviceIdsOnDate.contains(t.getServiceId()))
-      .min(Comparator.comparing(GtfsRealtimePartialTripIdMatcher::variantSortKey))
-      .orElse(null);
 
-    if (fuzzyMatch != null) {
-      matchedCount++;
-      matchedByVariantSuffixCount++;
-      return rewritten(trip, fuzzyMatch, effectiveRouteId);
+    // NYCT anchors all post-midnight realtime trips to the previous transit day, while parts of
+    // the static schedule anchor the same trips to the calendar date. A trip that has no active
+    // service on the claimed start date therefore frequently runs on the following date (and,
+    // for the reverse anchoring mismatch, the previous one). Try the claimed date first, then
+    // its neighbours; when a match is found on an alternate date, rewrite start_date as well so
+    // downstream service-day anchoring is consistent with the matched static trip.
+    Set<FeedScopedId> serviceIdsOnDate = null;
+    for (var candidateDate : List.of(
+      serviceDate,
+      serviceDate.plusDays(1),
+      serviceDate.minusDays(1)
+    )) {
+      var activeServiceIds = transitService
+        .getTripCalendars()
+        .listServiceIdsOnServiceDate(candidateDate);
+      if (serviceIdsOnDate == null) {
+        serviceIdsOnDate = activeServiceIds;
+      }
+
+      Trip match = exactCandidates
+        .stream()
+        .filter(t -> activeServiceIds.contains(t.getServiceId()))
+        .findFirst()
+        .orElse(null);
+
+      boolean variantSuffixMatch = false;
+      if (match == null) {
+        match = fuzzyCandidates
+          .stream()
+          .filter(t -> activeServiceIds.contains(t.getServiceId()))
+          .min(Comparator.comparing(GtfsRealtimePartialTripIdMatcher::variantSortKey))
+          .orElse(null);
+        variantSuffixMatch = match != null;
+      }
+
+      if (match != null) {
+        matchedCount++;
+        if (variantSuffixMatch) {
+          matchedByVariantSuffixCount++;
+        }
+        if (!candidateDate.equals(serviceDate)) {
+          matchedOnAlternateDateCount++;
+        }
+        return rewritten(trip, match, effectiveRouteId, candidateDate, serviceDate);
+      }
     }
 
     var allCandidates = exactCandidates.isEmpty() ? fuzzyCandidates : exactCandidates;
@@ -239,11 +264,16 @@ public class GtfsRealtimePartialTripIdMatcher {
   private static TripDescriptor rewritten(
     TripDescriptor trip,
     Trip match,
-    String effectiveRouteId
+    String effectiveRouteId,
+    LocalDate matchedDate,
+    LocalDate claimedDate
   ) {
     var builder = trip.toBuilder().setTripId(match.getId().getId());
     if (!effectiveRouteId.equals(trip.getRouteId())) {
       builder.setRouteId(effectiveRouteId);
+    }
+    if (!matchedDate.equals(claimedDate)) {
+      builder.setStartDate(ServiceDateUtils.asCompactString(matchedDate));
     }
     return builder.build();
   }

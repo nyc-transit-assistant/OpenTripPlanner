@@ -4,17 +4,22 @@ import static org.opentripplanner.updater.spi.UpdateErrorType.NOT_IMPLEMENTED_UN
 import static org.opentripplanner.updater.trip.UpdateIncrementality.FULL_DATASET;
 
 import com.google.transit.realtime.GtfsRealtime;
+import java.text.ParseException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transit.model.framework.DataValidationException;
@@ -46,6 +51,15 @@ import org.slf4j.LoggerFactory;
 public class GtfsRealTimeUpdateHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(GtfsRealTimeUpdateHandler.class);
+
+  /**
+   * How long after a trip instance's scheduled end a timeless update (e.g. a cancellation) is
+   * still attributed to that instance. Beyond this, if the following date is also active, the
+   * update is taken to mean the upcoming instance instead. Generous on purpose: a late-posted
+   * cancellation for a just-finished trip must not cancel tomorrow's run, while NYCT's
+   * previous-transit-day anchoring puts the claimed instance a full ~24h in the past.
+   */
+  private static final Duration REANCHOR_GRACE = Duration.ofHours(4);
 
   private final MutableTimetableSnapshot buffer;
   private final TransitEditorService transitEditorService;
@@ -125,6 +139,7 @@ public class GtfsRealTimeUpdateHandler {
     int convertedScheduledToAdded = 0;
     int convertedScheduledToAddedDueToPatternDivergence = 0;
     int skippedInformationlessUpdates = 0;
+    int reanchoredStartDates = 0;
 
     // Inside an active trip_replacement_period the realtime feed is authoritative for the
     // covered route. If we can't resolve an RT trip to a static trip, treat it as ADDED rather
@@ -236,6 +251,12 @@ public class GtfsRealTimeUpdateHandler {
           resolvedFeedId = resolveFeedIdForTripUpdate(rawTripUpdate, feedIds);
         }
 
+        var reanchored = reanchorStartDate(rawTripUpdate, resolvedFeedId);
+        if (reanchored != rawTripUpdate) {
+          reanchoredStartDates++;
+          rawTripUpdate = reanchored;
+        }
+
         if (rawTripUpdate.hasTrip() && rawTripUpdate.getTrip().hasTripId()) {
           var tripIdValue = rawTripUpdate.getTrip().getTripId();
           if (!tripIdValue.isBlank()) {
@@ -338,7 +359,9 @@ public class GtfsRealTimeUpdateHandler {
         "[feedIds={}] partial-matcher diag: {}, strippedEmptyStopTimeEvents=" +
           strippedEmptyStopTimeEvents +
           ", skippedInformationlessUpdates=" +
-          skippedInformationlessUpdates,
+          skippedInformationlessUpdates +
+          ", reanchoredStartDates=" +
+          reanchoredStartDates,
         feedIds,
         partialTripIdMatcher.summarizeCounters()
       );
@@ -722,6 +745,177 @@ public class GtfsRealTimeUpdateHandler {
    *
    * @return the same instance when nothing needed stripping, a rebuilt update otherwise
    */
+  /**
+   * Correct the service date of updates whose realtime anchoring disagrees with the static
+   * schedule's anchoring of the same trip.
+   * <p>
+   * NYCT anchors all post-midnight realtime trips to the previous transit day, while the static
+   * schedule anchors some of the same trips to the calendar date (both {@code 25:27}-on-yesterday
+   * and {@code 01:27}-on-today style trips exist, interleaved). When the two anchors disagree,
+   * absolute realtime times get converted to service-day-relative seconds against the wrong
+   * midnight and every delay comes out {@code true_delay ± 86400}; timeless updates
+   * (cancellations) silently target the wrong day's trip instance.
+   * <p>
+   * The correction only applies when it is provably safe — see
+   * {@link #chooseStartDate(LocalDate, List, OptionalLong, int, int, java.time.ZoneId, Instant)}.
+   *
+   * @return the same instance when no correction applies, a rebuilt update otherwise
+   */
+  private GtfsRealtime.TripUpdate reanchorStartDate(
+    GtfsRealtime.TripUpdate tripUpdate,
+    String feedId
+  ) {
+    if (!tripUpdate.hasTrip()) {
+      return tripUpdate;
+    }
+    var descriptor = tripUpdate.getTrip();
+    if (!descriptor.hasTripId() || descriptor.getTripId().isBlank() || !descriptor.hasStartDate()) {
+      return tripUpdate;
+    }
+    // NEW/ADDED trips create an instance rather than referencing one; their date is authoritative.
+    if (
+      descriptor.hasScheduleRelationship() &&
+      (descriptor.getScheduleRelationship() ==
+          GtfsRealtime.TripDescriptor.ScheduleRelationship.NEW ||
+        descriptor.getScheduleRelationship() ==
+        GtfsRealtime.TripDescriptor.ScheduleRelationship.ADDED)
+    ) {
+      return tripUpdate;
+    }
+    var trip = transitEditorService.getTrip(new FeedScopedId(feedId, descriptor.getTripId()));
+    if (trip == null) {
+      return tripUpdate;
+    }
+    LocalDate claimed;
+    try {
+      claimed = ServiceDateUtils.parseString(descriptor.getStartDate());
+    } catch (ParseException e) {
+      return tripUpdate;
+    }
+    var pattern = transitEditorService.findPattern(trip);
+    if (pattern == null) {
+      return tripUpdate;
+    }
+    var tripTimes = pattern.getScheduledTimetable().getTripTimes(trip.getId());
+    if (tripTimes == null) {
+      return tripUpdate;
+    }
+
+    var tripCalendars = transitEditorService.getTripCalendars();
+    var activeDates = Stream.of(claimed, claimed.plusDays(1), claimed.minusDays(1))
+      .filter(date -> tripCalendars.isActiveOn(trip.getServiceId(), date))
+      .toList();
+
+    var cancellation =
+      descriptor.hasScheduleRelationship() &&
+      (descriptor.getScheduleRelationship() ==
+          GtfsRealtime.TripDescriptor.ScheduleRelationship.CANCELED ||
+        descriptor.getScheduleRelationship() ==
+        GtfsRealtime.TripDescriptor.ScheduleRelationship.DELETED);
+    var best = chooseStartDate(
+      claimed,
+      activeDates,
+      firstAbsoluteTime(tripUpdate),
+      cancellation,
+      tripTimes.getDepartureTime(0),
+      tripTimes.getArrivalTime(tripTimes.getNumStops() - 1),
+      transitEditorService.getTimeZone(),
+      instantNow.get()
+    );
+    if (best.equals(claimed)) {
+      return tripUpdate;
+    }
+    LOG.debug(
+      "Re-anchoring trip update for {} from start date {} to {}",
+      trip.getId(),
+      claimed,
+      best
+    );
+    var rewritten = descriptor
+      .toBuilder()
+      .setStartDate(ServiceDateUtils.asCompactString(best))
+      .build();
+    return tripUpdate.toBuilder().setTrip(rewritten).build();
+  }
+
+  /**
+   * Pick the service date the update most plausibly refers to. The rules only deviate from the
+   * claimed date when the deviation is provably safe:
+   * <ul>
+   *   <li>When the update carries an absolute time, choose the active date under which the
+   *   realtime times sit closest to the trip's schedule. Candidate anchors are ~24h apart, so
+   *   within-trip offsets can never flip the choice; for a correctly anchored feed this always
+   *   picks the claimed date.</li>
+   *   <li>When the update is timeless (e.g. a cancellation) and the claimed date is active,
+   *   keep it — unless that instance already completed more than {@link #REANCHOR_GRACE} ago
+   *   and the following date is also active, in which case the update must refer to the
+   *   upcoming instance (NYCT cancels tonight's post-midnight trips under yesterday's date).</li>
+   *   <li>When the update is timeless and the claimed date is inactive, use the following date
+   *   if active (realtime anchors to the previous transit day), else the previous one.</li>
+   * </ul>
+   */
+  static LocalDate chooseStartDate(
+    LocalDate claimed,
+    List<LocalDate> activeDates,
+    OptionalLong firstRtTime,
+    boolean cancellation,
+    int scheduledFirstDepartureSecs,
+    int scheduledLastArrivalSecs,
+    java.time.ZoneId zone,
+    Instant now
+  ) {
+    if (activeDates.isEmpty() || List.of(claimed).equals(activeDates)) {
+      return claimed;
+    }
+    if (firstRtTime.isPresent()) {
+      long rt = firstRtTime.getAsLong();
+      return activeDates
+        .stream()
+        .min(
+          Comparator.comparingLong(date ->
+            Math.abs(
+              rt -
+                (ServiceDateUtils.asStartOfService(date, zone).toEpochSecond() +
+                  scheduledFirstDepartureSecs)
+            )
+          )
+        )
+        .orElse(claimed);
+    }
+    var next = claimed.plusDays(1);
+    if (activeDates.contains(claimed)) {
+      // Without absolute times the claimed date can only be overridden for cancellations:
+      // delay-only updates carry no signal to disambiguate with, and relocating them would
+      // move valid updates off the instance they belong to.
+      if (!cancellation) {
+        return claimed;
+      }
+      var claimedInstanceEnd = ServiceDateUtils.asStartOfService(claimed, zone)
+        .toInstant()
+        .plusSeconds(scheduledLastArrivalSecs);
+      if (claimedInstanceEnd.plus(REANCHOR_GRACE).isBefore(now) && activeDates.contains(next)) {
+        return next;
+      }
+      return claimed;
+    }
+    return activeDates.contains(next) ? next : activeDates.getFirst();
+  }
+
+  /**
+   * The first absolute arrival or departure time carried by the update, if any.
+   */
+  private static OptionalLong firstAbsoluteTime(GtfsRealtime.TripUpdate tripUpdate) {
+    for (var stu : tripUpdate.getStopTimeUpdateList()) {
+      if (stu.hasArrival() && stu.getArrival().hasTime()) {
+        return OptionalLong.of(stu.getArrival().getTime());
+      }
+      if (stu.hasDeparture() && stu.getDeparture().hasTime()) {
+        return OptionalLong.of(stu.getDeparture().getTime());
+      }
+    }
+    return OptionalLong.empty();
+  }
+
   /**
    * True when the update carries no stop time updates and plain SCHEDULED semantics — nothing
    * to apply, nothing being cancelled. Such updates are presence markers at most.
