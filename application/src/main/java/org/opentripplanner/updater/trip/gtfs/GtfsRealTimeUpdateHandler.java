@@ -605,16 +605,47 @@ public class GtfsRealTimeUpdateHandler {
           if (out.containsKey(key)) {
             continue;
           }
-          harvestTrip(
-            out,
-            tripId,
-            serviceDate,
-            buffer.getNewTripPatternForModifiedTrip(tripId, serviceDate)
-          );
+          var probedPattern = buffer.getNewTripPatternForModifiedTrip(tripId, serviceDate);
+          if (probedPattern == null) {
+            probedPattern = realTimeTouchedScheduledPattern(tripId, serviceDate);
+          }
+          harvestTrip(out, tripId, serviceDate, probedPattern);
         }
       }
     }
     return out;
+  }
+
+  /**
+   * A matched trip is only registered in the modified-trip pattern map once its realtime stop
+   * pattern actually differs from the scheduled one. Before the origin departs, the feed still
+   * lists every stop, so a matched trip's realtime state — plain delay updates, or a
+   * REPLACEMENT rebuild whose only divergence is an unknown stop (NYCT phantom stops absent
+   * from static GTFS) — rides the <em>scheduled</em> pattern's timetable. At the origin
+   * departure the origin drops from the feed, the pattern finally diverges, and the
+   * modified-trip probe above finds nothing from the previous cycle: without this fallback the
+   * origin stop is silently lost at exactly that transition (the Whitehall St case). Only
+   * realtime-touched trip times are harvested — scheduled times are predictions nobody
+   * observed, and carrying them would fabricate history the feed never reported.
+   */
+  @Nullable
+  private org.opentripplanner.transit.model.network.TripPattern realTimeTouchedScheduledPattern(
+    FeedScopedId tripId,
+    LocalDate serviceDate
+  ) {
+    var trip = transitEditorService.getTrip(tripId);
+    if (trip == null) {
+      return null;
+    }
+    var pattern = transitEditorService.findPattern(trip);
+    if (pattern == null) {
+      return null;
+    }
+    var tripTimes = buffer.resolve(pattern, serviceDate).getTripTimes(tripId);
+    if (tripTimes == null || !tripTimes.hasAnyUpdates() || tripTimes.isCanceledOrDeleted()) {
+      return null;
+    }
+    return pattern;
   }
 
   private void harvestTrip(

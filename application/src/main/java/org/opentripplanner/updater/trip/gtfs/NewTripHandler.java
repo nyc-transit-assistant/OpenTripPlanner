@@ -36,6 +36,16 @@ import org.opentripplanner.updater.trip.patterncache.TripPatternCache;
  */
 class NewTripHandler {
 
+  private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(
+    NewTripHandler.class
+  );
+
+  /**
+   * Carried-forward stop times that overlap the current first stop by no more than this are
+   * clamped (stale prediction); larger overlaps abandon the carry (genuine pattern change).
+   */
+  private static final long MAX_CARRIED_TIME_OVERLAP_SECONDS = 600;
+
   private final TransitEditorService transitEditorService;
   private final MutableTimetableSnapshot buffer;
   private final TripTimesUpdater tripTimesUpdater;
@@ -128,6 +138,7 @@ class NewTripHandler {
   ) throws UpdateException {
     FeedScopedId tripId = trip.getId();
     var stopAndStopTimeUpdates = mergeCarriedForwardStops(
+      tripId,
       pastStops,
       matchStopsToStopTimeUpdates(tripUpdate)
     );
@@ -208,10 +219,17 @@ class NewTripHandler {
    * carried.
    */
   private List<StopAndStopTimeUpdate> mergeCarriedForwardStops(
+    FeedScopedId tripId,
     @Nullable List<PastStop> pastStops,
     List<StopAndStopTimeUpdate> current
   ) {
     if (pastStops == null || pastStops.isEmpty() || current.isEmpty()) {
+      LOG.debug(
+        "carry[{}]: nothing to merge (pastStops={}, current={})",
+        tripId,
+        pastStops == null ? "null" : pastStops.size(),
+        current.size()
+      );
       return current;
     }
     var first = current.getFirst();
@@ -225,6 +243,17 @@ class NewTripHandler {
     }
     if (firstIndexInPast <= 0) {
       // 0: nothing has rolled off; -1: the pattern changed under us — carry nothing.
+      if (firstIndexInPast < 0) {
+        LOG.debug(
+          "carry[{}]: current first stop {} not in past pattern {}",
+          tripId,
+          firstStopId,
+          pastStops
+            .stream()
+            .map(p -> p.stop().getId().getId())
+            .toList()
+        );
+      }
       return current;
     }
     var firstUpdate = first.stopTimeUpdate();
@@ -233,25 +262,49 @@ class NewTripHandler {
     long firstTime = firstArrival.orElse(firstDeparture.orElse(Long.MIN_VALUE));
     if (firstTime == Long.MIN_VALUE) {
       // Delay-only first stop: no absolute time to guard monotonicity against.
+      LOG.debug("carry[{}]: first stop has no absolute time, carrying nothing", tripId);
       return current;
     }
     var merged = new ArrayList<StopAndStopTimeUpdate>(firstIndexInPast + current.size());
     for (int i = 0; i < firstIndexInPast; i++) {
       var past = pastStops.get(i);
-      if (past.departureEpoch() > firstTime) {
-        // A carried time would not precede the current first stop — carry nothing.
-        return current;
+      long departure = past.departureEpoch();
+      long arrival = past.arrivalEpoch();
+      if (departure > firstTime) {
+        // A stale prediction can outlive the event it predicts: terminal departures in
+        // particular are held at schedule while the train has already left and arrived at
+        // the next stop (the Whitehall St case — losing the origin on every W trip).
+        // A small overlap is prediction staleness: clamp the carried times to the current
+        // first stop's time (monotonicity preserved — past times are non-decreasing and
+        // only a suffix hits the ceiling). A large overlap means the pattern genuinely
+        // moved (reroute/renumber): carry nothing.
+        if (departure - firstTime > MAX_CARRIED_TIME_OVERLAP_SECONDS) {
+          LOG.debug(
+            "carry[{}]: overlap too large at {} (departure {} vs first time {}), carrying nothing",
+            tripId,
+            past.stop().getId().getId(),
+            departure,
+            firstTime
+          );
+          return current;
+        }
+        departure = firstTime;
+        arrival = Math.min(arrival, firstTime);
       }
       var update = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
         .setStopId(past.stop().getId().getId())
-        .setArrival(GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder().setTime(past.arrivalEpoch()))
-        .setDeparture(
-          GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder().setTime(past.departureEpoch())
-        )
+        .setArrival(GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder().setTime(arrival))
+        .setDeparture(GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder().setTime(departure))
         .build();
       merged.add(new StopAndStopTimeUpdate(past.stop(), new StopTimeUpdate(update)));
     }
     merged.addAll(current);
+    LOG.debug(
+      "carry[{}]: carried {} past stops ahead of {}",
+      tripId,
+      firstIndexInPast,
+      firstStopId
+    );
     return merged;
   }
 
