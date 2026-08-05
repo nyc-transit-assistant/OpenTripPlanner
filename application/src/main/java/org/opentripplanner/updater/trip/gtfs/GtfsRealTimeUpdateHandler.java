@@ -622,17 +622,31 @@ public class GtfsRealTimeUpdateHandler {
         var candidateIds = resolvedId.equals(descriptor.getTripId())
           ? List.of(descriptor.getTripId())
           : List.of(descriptor.getTripId(), resolvedId);
+        // Start-date re-anchoring rewrites the claimed date before apply, so the previous
+        // cycle's state lives under the REWRITTEN date, not the raw claimed one. Probe the
+        // claimed date's neighbours too: the date that holds realtime state is by
+        // construction the date the re-anchored apply will look up. First hit wins.
+        var candidateDates = List.of(
+          serviceDate,
+          serviceDate.plusDays(1),
+          serviceDate.minusDays(1)
+        );
         for (var idValue : candidateIds) {
           var tripId = new FeedScopedId(feedId, idValue);
-          var key = new TripIdAndServiceDate(tripId, serviceDate);
-          if (out.containsKey(key)) {
-            continue;
+          for (var candidateDate : candidateDates) {
+            var key = new TripIdAndServiceDate(tripId, candidateDate);
+            if (out.containsKey(key)) {
+              break;
+            }
+            var probedPattern = buffer.getNewTripPatternForModifiedTrip(tripId, candidateDate);
+            if (probedPattern == null) {
+              probedPattern = realTimeTouchedScheduledPattern(tripId, candidateDate);
+            }
+            if (probedPattern != null) {
+              harvestTrip(out, tripId, candidateDate, probedPattern);
+              break;
+            }
           }
-          var probedPattern = buffer.getNewTripPatternForModifiedTrip(tripId, serviceDate);
-          if (probedPattern == null) {
-            probedPattern = realTimeTouchedScheduledPattern(tripId, serviceDate);
-          }
-          harvestTrip(out, tripId, serviceDate, probedPattern);
         }
       }
     }

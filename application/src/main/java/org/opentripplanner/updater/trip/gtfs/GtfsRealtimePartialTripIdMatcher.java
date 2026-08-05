@@ -97,6 +97,7 @@ public class GtfsRealtimePartialTripIdMatcher {
     int c = callCount;
     int m = matchedCount;
     int v = matchedByVariantSuffixCount;
+    int ad = matchedOnAlternateDateCount;
     int mf = missingFieldsCount;
     int ar = alreadyResolvedCount;
     int pf = parseStartDateFailedCount;
@@ -109,6 +110,7 @@ public class GtfsRealtimePartialTripIdMatcher {
       callCount = c;
       matchedCount = m;
       matchedByVariantSuffixCount = v;
+      matchedOnAlternateDateCount = ad;
       missingFieldsCount = mf;
       alreadyResolvedCount = ar;
       parseStartDateFailedCount = pf;
