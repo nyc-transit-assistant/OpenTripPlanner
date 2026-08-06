@@ -128,6 +128,69 @@ class StartDateReanchoringTest implements RealtimeTestConstants {
       var tripTimes = env.tripData(staticTripId).tripTimes();
       assertEquals(60, tripTimes.getDepartureDelay(0));
     }
+
+    /**
+     * NYCT regenerates supplement-schedule trip ids per service date, so tonight's
+     * post-midnight train may have no static variant active on its true service date at all.
+     * Matching must not latch onto the adjacent day's instance — that pins tonight's realtime
+     * onto tomorrow's trip with a −24h delay (observed live 2026-08-06 on the 6 train). The
+     * whole-day-contradiction guard discards the resolution and the update flows down the
+     * NEW-trip path with correct times, leaving the static instance untouched.
+     */
+    @Test
+    void discardsResolutionWhenTimesContradictOnlyActiveInstance() {
+      var staticTripId = "L0S3-6-1091-S01_150300_6..N01R";
+      var realtimeTripId = "150300_6..N01R";
+
+      var envBuilder = TransitTestEnvironment.of(SERVICE_DATE, ZONE);
+      var stopA = envBuilder.stop(STOP_A_ID);
+      var stopB = envBuilder.stop(STOP_B_ID);
+      var route = envBuilder.route("6");
+      // Anchored 25:03-style: the SERVICE_DATE instance departs at 01:03 on the following
+      // calendar day. Tonight's 01:03 train belongs to the previous service date, which has
+      // no active variant in this environment.
+      var env = envBuilder
+        .addTrip(
+          TripInput.of(staticTripId)
+            .withRoute(route)
+            .addStop(stopA, "25:03")
+            .addStop(stopB, "25:13")
+        )
+        // Unrelated trip that extends the transit service period to cover the previous day,
+        // like a real multi-day feed — otherwise NEW-trip synthesis on that date is rejected
+        // with OUTSIDE_SERVICE_PERIOD before the behavior under test is reached.
+        .addTrip(
+          TripInput.of("PreviousDayServiceSpan")
+            .withServiceDates(PREVIOUS_DAY)
+            .addStop(stopA, "12:00")
+            .addStop(stopB, "12:10")
+        )
+        .build();
+      // Just after midnight: the previous transit day's post-midnight window.
+      var now = SERVICE_DATE.atTime(1, 0).atZone(ZONE).toInstant();
+      var rt = GtfsRtTestHelper.of(env, now);
+
+      // Realtime for tonight's train: previous-day anchoring, absolute times 01:10/01:20
+      // on the calendar SERVICE_DATE ("25:10" relative to the previous day's midnight).
+      var update = rt
+        .tripUpdate(realtimeTripId, PREVIOUS_DAY, SCHEDULED)
+        .withRouteId("6")
+        .addStopTime(STOP_A_ID, "25:10")
+        .addStopTime(STOP_B_ID, "25:20")
+        .build();
+      var period = new TripReplacementPeriod("6", now.plusSeconds(30 * 60));
+
+      assertSuccess(rt.applyTripUpdates(List.of(update), List.of(period), FULL_DATASET, true));
+
+      // The static instance (departing tomorrow 01:03) must be untouched — no −24h delay.
+      var staticTimes = env.tripData(staticTripId).tripTimes();
+      assertEquals(0, staticTimes.getDepartureDelay(0));
+
+      // Tonight's train is synthesized as a NEW trip on the claimed date with correct times.
+      var addedTimes = env.tripData(realtimeTripId, PREVIOUS_DAY).tripTimes();
+      assertTrue(addedTimes.isAdded());
+      assertEquals(25 * 3600 + 10 * 60, addedTimes.getDepartureTime(0));
+    }
   }
 
   /**

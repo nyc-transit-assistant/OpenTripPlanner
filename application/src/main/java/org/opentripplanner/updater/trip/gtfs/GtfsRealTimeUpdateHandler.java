@@ -140,6 +140,7 @@ public class GtfsRealTimeUpdateHandler {
     int convertedScheduledToAddedDueToPatternDivergence = 0;
     int skippedInformationlessUpdates = 0;
     int reanchoredStartDates = 0;
+    int discardedDateMismatchedResolutions = 0;
 
     // Inside an active trip_replacement_period the realtime feed is authoritative for the
     // covered route. If we can't resolve an RT trip to a static trip, treat it as ADDED rather
@@ -231,6 +232,9 @@ public class GtfsRealTimeUpdateHandler {
           rawTripUpdate = sanitized;
         }
         String resolvedFeedId = resolveFeedIdForTripUpdate(rawTripUpdate, feedIds);
+        // Kept so a resolution that turns out to contradict the schedule by a whole day can
+        // be undone wholesale (trip id and start date rewrites included).
+        var preResolutionUpdate = rawTripUpdate;
 
         if (partialTripIdMatcher != null) {
           // Some agencies (notably MTA NYC Subway) emit a realtime trip_id that is a suffix
@@ -255,6 +259,20 @@ public class GtfsRealTimeUpdateHandler {
         if (reanchored != rawTripUpdate) {
           reanchoredStartDates++;
           rawTripUpdate = reanchored;
+        }
+
+        // NYCT regenerates supplement-schedule trip ids per service date, so tonight's
+        // post-midnight train may have no static variant active on its true service date at
+        // all. The partial matcher's alternate-date fallback (or an exact id hit) then
+        // resolves the update onto the *other* day's instance, and no start-date choice can
+        // reconcile it — the applied delay comes out ±24h and tomorrow's trip surfaces in
+        // results with tonight's estimated times. When the resolved schedule anchor still
+        // contradicts the update's absolute times by more than half a day, the resolution
+        // itself is wrong: undo it entirely and let the update flow down the unresolved path
+        // (NEW-trip synthesis on covered routes), which yields correct times.
+        if (resolutionContradictsSchedule(rawTripUpdate, resolvedFeedId)) {
+          discardedDateMismatchedResolutions++;
+          rawTripUpdate = preResolutionUpdate;
         }
 
         if (rawTripUpdate.hasTrip() && rawTripUpdate.getTrip().hasTripId()) {
@@ -360,6 +378,8 @@ public class GtfsRealTimeUpdateHandler {
           strippedEmptyStopTimeEvents +
           ", skippedInformationlessUpdates=" +
           skippedInformationlessUpdates +
+          ", discardedDateMismatchedResolutions=" +
+          discardedDateMismatchedResolutions +
           ", reanchoredStartDates=" +
           reanchoredStartDates,
         feedIds,
@@ -775,6 +795,73 @@ public class GtfsRealTimeUpdateHandler {
    *
    * @return the same instance when no correction applies, a rebuilt update otherwise
    */
+  /**
+   * True when the update resolves to a static trip whose scheduled anchor on the claimed
+   * start date is more than half a day away from the update's first absolute time — i.e. no
+   * start-date assignment can reconcile the resolution with the realtime times (typically:
+   * the trip's true instance has no active variant in the static data, and matching latched
+   * onto the adjacent day's instance). Timeless updates cannot be judged and return false.
+   */
+  private boolean resolutionContradictsSchedule(GtfsRealtime.TripUpdate tripUpdate, String feedId) {
+    if (!tripUpdate.hasTrip()) {
+      return false;
+    }
+    var descriptor = tripUpdate.getTrip();
+    if (!descriptor.hasTripId() || descriptor.getTripId().isBlank() || !descriptor.hasStartDate()) {
+      return false;
+    }
+    if (
+      descriptor.hasScheduleRelationship() &&
+      (descriptor.getScheduleRelationship() ==
+          GtfsRealtime.TripDescriptor.ScheduleRelationship.NEW ||
+        descriptor.getScheduleRelationship() ==
+        GtfsRealtime.TripDescriptor.ScheduleRelationship.ADDED)
+    ) {
+      return false;
+    }
+    var firstRtTime = firstAbsoluteTime(tripUpdate);
+    if (firstRtTime.isEmpty()) {
+      return false;
+    }
+    var trip = transitEditorService.getTrip(new FeedScopedId(feedId, descriptor.getTripId()));
+    if (trip == null) {
+      return false;
+    }
+    LocalDate claimed;
+    try {
+      claimed = ServiceDateUtils.parseString(descriptor.getStartDate());
+    } catch (ParseException e) {
+      return false;
+    }
+    var pattern = transitEditorService.findPattern(trip);
+    if (pattern == null) {
+      return false;
+    }
+    var tripTimes = pattern.getScheduledTimetable().getTripTimes(trip.getId());
+    if (tripTimes == null) {
+      return false;
+    }
+    long anchor =
+      ServiceDateUtils.asStartOfService(
+        claimed,
+        transitEditorService.getTimeZone()
+      ).toEpochSecond() +
+      tripTimes.getDepartureTime(0);
+    long delta = firstRtTime.getAsLong() - anchor;
+    // The first provided stop may be mid-trip, so delta legitimately reaches trip duration;
+    // half a day cleanly separates that from a whole-day anchoring contradiction.
+    if (Math.abs(delta) > Duration.ofHours(12).toSeconds()) {
+      LOG.debug(
+        "Discarding resolution of trip {} on {}: realtime times are {}s away from the schedule anchor",
+        trip.getId(),
+        claimed,
+        delta
+      );
+      return true;
+    }
+    return false;
+  }
+
   private GtfsRealtime.TripUpdate reanchorStartDate(
     GtfsRealtime.TripUpdate tripUpdate,
     String feedId
