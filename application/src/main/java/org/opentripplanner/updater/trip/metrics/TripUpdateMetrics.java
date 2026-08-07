@@ -17,7 +17,7 @@ public class TripUpdateMetrics {
     this.baseTags = List.of(
       Tag.of("configRef", parameters.configRef()),
       Tag.of("url", parameters.url()),
-      Tag.of("feedId", parameters.feedId())
+      Tag.of("feedId", parameters.metricsFeedLabel())
     );
   }
 
