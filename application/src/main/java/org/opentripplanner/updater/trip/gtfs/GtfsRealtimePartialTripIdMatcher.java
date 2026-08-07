@@ -46,6 +46,19 @@ public class GtfsRealtimePartialTripIdMatcher {
    */
   private static final Map<String, String> ROUTE_ALIASES = Map.of("SS", "SI");
 
+  /**
+   * The static route id that a realtime route id denotes, for callers comparing a realtime route
+   * against static-keyed data — notably the {@code trip_replacement_period} coverage check, which
+   * would otherwise read SIR's realtime-only {@code SS} label as a route NYCT never claimed
+   * authority over, and drop those trips instead of synthesizing them.
+   * <p>
+   * Returns the id unchanged when no alias applies. Safe to call unconditionally because the
+   * aliases only cover realtime ids with no static route of their own.
+   */
+  static String staticRouteId(String realtimeRouteId) {
+    return ROUTE_ALIASES.getOrDefault(realtimeRouteId, realtimeRouteId);
+  }
+
   // Per-batch diagnostic counters. Reset implicitly because a fresh matcher is built per
   // graph-writer run.
   public int callCount;

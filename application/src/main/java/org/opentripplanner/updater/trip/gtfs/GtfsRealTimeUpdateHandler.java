@@ -155,7 +155,10 @@ public class GtfsRealTimeUpdateHandler {
         expiredPeriods++;
       }
     }
-    Set<String> unresolvedRouteIds = new HashSet<>();
+    // Realtime route labels, as sent, of trips that resolved to no static trip and whose route no
+    // active replacement period covers. Populated at the point of decision rather than subtracted
+    // afterwards, so an aliased label is not reported as uncovered when its static route is.
+    Set<String> unresolvedUncoveredRouteIds = new HashSet<>();
 
     // Snapshot realtime-added trip state before any clear: producers such as NYCT drop a
     // stop's update once the vehicle departs it, so a NEW trip rebuilt from the current
@@ -302,17 +305,46 @@ public class GtfsRealTimeUpdateHandler {
         // from the RT data is more correct than forcing a divergent path through a stale one.
         if (rawTripUpdate.hasTrip() && rawTripUpdate.getTrip().hasRouteId()) {
           var trip = rawTripUpdate.getTrip();
+          var rawRouteId = trip.getRouteId();
+          // Replacement periods are keyed by the static route id, so a realtime-only route label
+          // has to be resolved before the coverage check. NYCT's SIR feed sends shuttle-pattern
+          // trains as route SS while declaring the period against SI, so comparing raw ids marks
+          // them uncovered and drops them.
+          //
+          // Only substituted when the realtime id has no static route of its own, mirroring
+          // GtfsRealtimePartialTripIdMatcher.match(): the alias table is global, and a feed with
+          // a genuine route of that name must keep it.
+          var coverageRouteId = transitEditorService.getRoute(
+              new FeedScopedId(resolvedFeedId, rawRouteId)
+            ) ==
+            null
+            ? GtfsRealtimePartialTripIdMatcher.staticRouteId(rawRouteId)
+            : rawRouteId;
           var resolvedTrip = trip.hasTripId() && !trip.getTripId().isBlank()
             ? transitEditorService.getTrip(new FeedScopedId(resolvedFeedId, trip.getTripId()))
             : null;
           boolean shouldRewrite = false;
           String rewriteReason = null;
           if (resolvedTrip == null) {
-            unresolvedRouteIds.add(trip.getRouteId());
-            shouldRewrite = coveredRouteIds.contains(trip.getRouteId());
+            var coveredByPeriod = coveredRouteIds.contains(coverageRouteId);
+            if (!coveredByPeriod) {
+              // Recorded with the label the feed actually used, so the diagnostic below can still
+              // tell an SS-specific resolution failure from a genuine SI one.
+              unresolvedUncoveredRouteIds.add(rawRouteId);
+            }
+            // Synthesis looks the route up by the descriptor's id. With no static route,
+            // RouteFactory falls through to createRoute, which dereferences the agency id of an
+            // AddedRoute extension NYCT does not send and throws IllegalArgumentException — not
+            // one of the per-update exceptions caught below, so it escapes the loop and, with the
+            // FULL_DATASET clear already applied, takes the rest of the batch with it. Dropping
+            // the single trip is the lesser failure.
+            var targetRouteExists =
+              transitEditorService.getRoute(new FeedScopedId(resolvedFeedId, coverageRouteId)) !=
+              null;
+            shouldRewrite = coveredByPeriod && targetRouteExists;
             rewriteReason = "unresolved";
           } else if (
-            coveredRouteIds.contains(trip.getRouteId()) &&
+            coveredRouteIds.contains(coverageRouteId) &&
             rtStopsDivergeFromPattern(rawTripUpdate, resolvedTrip, resolvedFeedId)
           ) {
             shouldRewrite = true;
@@ -330,7 +362,16 @@ public class GtfsRealTimeUpdateHandler {
               var newRel = "unresolved".equals(rewriteReason)
                 ? GtfsRealtime.TripDescriptor.ScheduleRelationship.NEW
                 : GtfsRealtime.TripDescriptor.ScheduleRelationship.REPLACEMENT;
-              var rewritten = trip.toBuilder().setScheduleRelationship(newRel).build();
+              // Carry the alias into the rewrite, not just the coverage check. Synthesis looks
+              // the route up by the descriptor's id and, finding no static route, tries to build
+              // one from the AddedRoute extension — which NYCT does not send, so it dereferences
+              // a null agency id and throws, failing the whole batch. Naming the static route the
+              // realtime label denotes keeps the synthesized trip on the route it belongs to.
+              var rewrittenBuilder = trip.toBuilder().setScheduleRelationship(newRel);
+              if (!coverageRouteId.equals(trip.getRouteId())) {
+                rewrittenBuilder.setRouteId(coverageRouteId);
+              }
+              var rewritten = rewrittenBuilder.build();
               rawTripUpdate = rawTripUpdate.toBuilder().setTrip(rewritten).build();
               if ("unresolved".equals(rewriteReason)) {
                 convertedScheduledToAdded++;
@@ -408,16 +449,12 @@ public class GtfsRealTimeUpdateHandler {
     // When unresolved trips show up on routes that no active replacement period covers, log
     // once so we can tell apart "NYCT didn't send a period for this route" from "our matcher
     // just couldn't resolve it".
-    if (!unresolvedRouteIds.isEmpty() && !tripReplacementPeriods.isEmpty()) {
-      var uncoveredUnresolved = new HashSet<>(unresolvedRouteIds);
-      uncoveredUnresolved.removeAll(coveredRouteIds);
-      if (!uncoveredUnresolved.isEmpty()) {
-        LOG.info(
-          "[feedIds={}] unresolved RT trips on routes not covered by any active replacement period: {}",
-          feedIds,
-          uncoveredUnresolved
-        );
-      }
+    if (!unresolvedUncoveredRouteIds.isEmpty() && !tripReplacementPeriods.isEmpty()) {
+      LOG.info(
+        "[feedIds={}] unresolved RT trips on routes not covered by any active replacement period: {}",
+        feedIds,
+        unresolvedUncoveredRouteIds
+      );
     }
     return updateResult;
   }

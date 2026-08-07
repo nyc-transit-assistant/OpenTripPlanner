@@ -290,6 +290,108 @@ class TripReplacementPeriodTest implements RealtimeTestConstants {
   }
 
   /**
+   * NYCT labels SIR shuttle-pattern trains with the realtime-only route id {@code SS} while
+   * declaring the replacement period against the static route {@code SI}. Coverage is keyed by
+   * the static id, so the alias has to be resolved before the check — otherwise an unresolved SS
+   * trip reads as being on a route NYCT never claimed and is dropped with TRIP_NOT_FOUND, even
+   * though the feed is authoritative for the route it actually runs on.
+   */
+  @Test
+  void rewritesUnresolvedTripOnAliasedRealtimeRouteToAdded() {
+    var sirBuilder = TransitTestEnvironment.of(SERVICE_DATE);
+    var sirStopA = sirBuilder.stop(STOP_A_ID);
+    var sirStopB = sirBuilder.stop(STOP_B_ID);
+    var routeSi = sirBuilder.route("SI");
+    var sirEnv = sirBuilder
+      .addTrip(
+        TripInput.of("SirTrip")
+          .withRoute(routeSi)
+          .addStop(sirStopA, "12:00")
+          .addStop(sirStopB, "12:10")
+      )
+      .build();
+    var sirRt = GtfsRtTestHelper.of(sirEnv, NOW);
+
+    // The period names SI; the trip update calls the very same route SS.
+    var period = new TripReplacementPeriod("SI", WINDOW_END);
+    var update = sirRt
+      .tripUpdate("UnresolvableSirRtId", SCHEDULED)
+      .withRouteId("SS")
+      .addStopTime(STOP_A_ID, "12:05")
+      .addStopTime(STOP_B_ID, "12:15")
+      .build();
+
+    assertNoFailure(sirRt.applyTripUpdates(List.of(update), List.of(period), FULL_DATASET));
+
+    var added = sirEnv.tripData("UnresolvableSirRtId");
+    assertThat(added.trip()).isNotNull();
+    assertThat(state(added.tripTimes())).isEqualTo(RtState.ADDED);
+  }
+
+  /**
+   * Resolving the alias must not make the aliased route unconditionally covered: an SS trip is
+   * only rescued when SI itself is under an active period. Uses the same aliased route as the
+   * test above so it actually exercises the alias path.
+   */
+  @Test
+  void doesNotRewriteUnresolvedTripOnAliasedRouteWithoutItsPeriod() {
+    var sirBuilder = TransitTestEnvironment.of(SERVICE_DATE);
+    var sirStopA = sirBuilder.stop(STOP_A_ID);
+    var sirStopB = sirBuilder.stop(STOP_B_ID);
+    var routeSi = sirBuilder.route("SI");
+    var routeOther = sirBuilder.route("B");
+    var sirEnv = sirBuilder
+      .addTrip(
+        TripInput.of("SirTrip")
+          .withRoute(routeSi)
+          .addStop(sirStopA, "12:00")
+          .addStop(sirStopB, "12:10")
+      )
+      .addTrip(
+        TripInput.of("OtherTrip")
+          .withRoute(routeOther)
+          .addStop(sirStopA, "12:02")
+          .addStop(sirStopB, "12:12")
+      )
+      .build();
+    var sirRt = GtfsRtTestHelper.of(sirEnv, NOW);
+
+    // The period covers B, not SI — so the SS trip has no authority behind it.
+    var period = new TripReplacementPeriod("B", WINDOW_END);
+    var update = sirRt
+      .tripUpdate("UnresolvableSirRtId", SCHEDULED)
+      .withRouteId("SS")
+      .addStopTime(STOP_A_ID, "12:05")
+      .addStopTime(STOP_B_ID, "12:15")
+      .build();
+
+    var result = sirRt.applyTripUpdates(List.of(update), List.of(period), FULL_DATASET);
+
+    assertFailure(UpdateErrorType.TRIP_NOT_FOUND, result);
+  }
+
+  /**
+   * A covered route the static feed doesn't have cannot be synthesized: RouteFactory would try to
+   * build the route from an AddedRoute extension NYCT never sends and throw an
+   * IllegalArgumentException that the per-update handler does not catch, losing the whole batch
+   * after the full-dataset clear. The single trip is dropped instead.
+   */
+  @Test
+  void dropsUnresolvedTripWhenCoveredRouteHasNoStaticRoute() {
+    var period = new TripReplacementPeriod("GhostRoute", WINDOW_END);
+    var update = rt
+      .tripUpdate("UnresolvableRtId", SCHEDULED)
+      .withRouteId("GhostRoute")
+      .addStopTime(STOP_A_ID, "12:05")
+      .addStopTime(STOP_B_ID, "12:15")
+      .build();
+
+    var result = rt.applyTripUpdates(List.of(update), List.of(period), FULL_DATASET);
+
+    assertFailure(UpdateErrorType.TRIP_NOT_FOUND, result);
+  }
+
+  /**
    * A trip that already resolves to a static trip on a covered route must continue down the
    * SCHEDULED handler path — the ADDED rewrite is only meant for unresolved trips.
    */
