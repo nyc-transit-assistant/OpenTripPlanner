@@ -166,9 +166,13 @@ public class GtfsRealtimePartialTripIdMatcher {
       .flatMap(p -> p.scheduledTripsAsStream())
       .toList();
 
+    // The inner test is a loop rather than suffixes.stream().anyMatch(): this runs once per trip
+    // on the route for every realtime update, and allocation profiling attributed roughly a third
+    // of the whole JVM's allocation to the Stream and spliterator built here — to examine one or
+    // two strings. anyMatch over a short list is a short-circuiting OR, so this is the same test.
     var exactCandidates = allTripsOnRoute
       .stream()
-      .filter(t -> suffixes.stream().anyMatch(s -> t.getId().getId().endsWith(s)))
+      .filter(t -> endsWithAny(t, suffixes))
       .toList();
 
     // Fuzzy fallback: NYCT's L feed (and others) strips the route-variant suffix from the trip
@@ -315,8 +319,30 @@ public class GtfsRealtimePartialTripIdMatcher {
       .toList();
     return allTripsOnRoute
       .stream()
-      .filter(t -> variantPatterns.stream().anyMatch(p -> p.matcher(t.getId().getId()).matches()))
+      .filter(t -> matchesAny(t, variantPatterns))
       .toList();
+  }
+
+  /** True when the trip's id ends with any of the suffixes. */
+  private static boolean endsWithAny(Trip trip, List<String> suffixes) {
+    var id = trip.getId().getId();
+    for (var suffix : suffixes) {
+      if (id.endsWith(suffix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** True when the trip's id matches any of the variant-suffix patterns. */
+  private static boolean matchesAny(Trip trip, List<Pattern> patterns) {
+    var id = trip.getId().getId();
+    for (var pattern : patterns) {
+      if (pattern.matcher(id).matches()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
