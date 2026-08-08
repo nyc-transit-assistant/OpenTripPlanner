@@ -189,6 +189,7 @@ public class AddTransitEntitiesToGraph {
           double distance = Optional.of(pathway.getLength())
             .filter(l -> l > 0)
             .orElseGet(() -> distance(fromVertex.getCoordinate(), toVertex.getCoordinate()));
+          int stairCount = effectiveStairCount(pathway);
 
           PathwayEdge.createPathwayEdge(
             fromVertex,
@@ -196,7 +197,7 @@ public class AddTransitEntitiesToGraph {
             NonLocalizedString.ofNullable(pathway.getSignpostedAs()),
             pathway.getTraversalTime(),
             distance,
-            pathway.getStairCount(),
+            stairCount,
             pathway.getSlope(),
             pathway.isPathwayModeWheelchairAccessible()
           );
@@ -207,7 +208,7 @@ public class AddTransitEntitiesToGraph {
               NonLocalizedString.ofNullable(pathway.getReverseSignpostedAs()),
               pathway.getTraversalTime(),
               distance,
-              -1 * pathway.getStairCount(),
+              -1 * stairCount,
               -1 * pathway.getSlope(),
               pathway.isPathwayModeWheelchairAccessible()
             );
@@ -222,6 +223,19 @@ public class AddTransitEntitiesToGraph {
         }
       }
     }
+  }
+
+  /**
+   * stair_count is optional in GTFS, but {@code PathwayEdge#isStairs()} keys off {@code steps > 0}
+   * — a stairs-mode pathway without it would dodge the wheelchair stairsReluctance entirely and be
+   * traversed at only the generic inaccessible-street penalty. Floor it at one flight.
+   */
+  static int effectiveStairCount(Pathway pathway) {
+    int stairCount = pathway.getStairCount();
+    if (stairCount == 0 && pathway.getPathwayMode() == PathwayMode.STAIRS) {
+      return 16;
+    }
+    return stairCount;
   }
 
   /**
