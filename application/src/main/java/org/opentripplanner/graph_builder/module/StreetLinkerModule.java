@@ -243,9 +243,38 @@ public class StreetLinkerModule implements GraphBuilderModule {
     }
   }
 
-  private void linkTransitEntrances(Graph graph) {
+  public void linkTransitEntrances(Graph graph) {
     LOG.info("Linking transit entrances to graph...");
     for (TransitEntranceVertex tEntrance : graph.getVerticesOfType(TransitEntranceVertex.class)) {
+      // Idempotent so island pruning can call this again: an entrance whose
+      // nearest edge was an isolated stair stub links into an island, the
+      // island is pruned, and without a re-link the pathway-served platforms
+      // behind the entrance are stranded (linkTransitStops skips them).
+      // "Live" must mean walk-traversable: island pruning mostly strips the
+      // walk mode from edges rather than deleting them, so a link into a
+      // pruned stair-stub island still has outgoing edges — all unwalkable.
+      boolean hasLiveLink = tEntrance
+        .getOutgoing()
+        .stream()
+        .anyMatch(
+          e ->
+            e instanceof StreetTransitEntranceLink &&
+            e.getToVertex() != null &&
+            e
+              .getToVertex()
+              .getOutgoing()
+              .stream()
+              .anyMatch(
+                e2 ->
+                  e2 instanceof org.opentripplanner.street.model.edge.StreetEdge se &&
+                  se
+                    .getPermission()
+                    .allows(org.opentripplanner.street.model.StreetTraversalPermission.PEDESTRIAN)
+              )
+        );
+      if (hasLiveLink) {
+        continue;
+      }
       vertexLinker.linkVertexPermanently(
         tEntrance,
         new TraverseModeSet(TraverseMode.WALK),

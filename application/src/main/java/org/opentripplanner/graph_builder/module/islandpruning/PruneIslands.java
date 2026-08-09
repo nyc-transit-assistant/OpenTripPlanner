@@ -84,6 +84,10 @@ public class PruneIslands implements GraphBuilderModule {
     if (streetLinkerModule != null) {
       LOG.info("Reconnecting stops");
       streetLinkerModule.linkTransitStops(graph, timetableRepository);
+      // Entrances too: pathway-served stops are skipped above, so a station
+      // whose entrance linked into a pruned island would otherwise stay
+      // stranded from the street network entirely.
+      streetLinkerModule.linkTransitEntrances(graph);
     }
 
     // clean up pruned street vertices
