@@ -275,6 +275,9 @@ public class AddTransitEntitiesToGraph {
       getElevatorLabel(toVertex, pathway)
     );
 
+    // Rider-facing narrative: which elevator this is (feed signposted_as,
+    // e.g. "EL219 \u2014 mezzanine to uptown N/Q/R/W platform").
+    NonLocalizedString pathwayName = NonLocalizedString.ofNullable(pathway.getSignpostedAs());
     createOneWayElevatorEdges(
       fromVertex,
       toVertex,
@@ -284,7 +287,8 @@ public class AddTransitEntitiesToGraph {
       toLevel,
       permission,
       levels,
-      traversalTime
+      traversalTime,
+      pathwayName
     );
     if (pathway.isBidirectional()) {
       createOneWayElevatorEdges(
@@ -296,7 +300,8 @@ public class AddTransitEntitiesToGraph {
         fromLevel,
         permission,
         levels,
-        traversalTime
+        traversalTime,
+        pathwayName
       );
     }
   }
@@ -310,15 +315,18 @@ public class AddTransitEntitiesToGraph {
     @Nullable StopLevel toLevel,
     StreetTraversalPermission permission,
     double levels,
-    int traversalTime
+    int traversalTime,
+    @Nullable NonLocalizedString pathwayName
   ) {
     ElevatorBoardEdge elevatorBoardEdge = ElevatorBoardEdge.createElevatorBoardEdge(
       fromVertex,
-      fromOnboardVertex
+      fromOnboardVertex,
+      pathwayName
     );
     ElevatorAlightEdge elevatorAlightEdge = ElevatorAlightEdge.createElevatorAlightEdge(
       toOnboardVertex,
-      toVertex
+      toVertex,
+      pathwayName
     );
 
     if (fromLevel != null) {

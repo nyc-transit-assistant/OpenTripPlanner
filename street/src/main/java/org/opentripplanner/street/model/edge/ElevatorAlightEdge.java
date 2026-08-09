@@ -28,11 +28,19 @@ public class ElevatorAlightEdge extends Edge implements BikeWalkableEdge, Elevat
   private final LineString the_geom;
 
   /**
+   * A rider-facing name for this specific elevator (a GTFS pathway's
+   * signposted_as, e.g. "EL219 \u2014 mezzanine to uptown N/Q/R/W platform").
+   * Null falls back to the generic localized "elevator".
+   */
+  private final I18NString customName;
+
+  /**
    * @param from the vertex inside the elevator
    * @param to the vertex on the street network
    */
-  private ElevatorAlightEdge(ElevatorHopVertex from, Vertex to) {
+  private ElevatorAlightEdge(ElevatorHopVertex from, Vertex to, I18NString customName) {
     super(from, to);
+    this.customName = customName;
     // set up the geometry
     Coordinate[] coords = new Coordinate[2];
     coords[0] = new Coordinate(from.getX(), from.getY());
@@ -41,7 +49,15 @@ public class ElevatorAlightEdge extends Edge implements BikeWalkableEdge, Elevat
   }
 
   public static ElevatorAlightEdge createElevatorAlightEdge(ElevatorHopVertex from, Vertex to) {
-    return connectToGraph(new ElevatorAlightEdge(from, to));
+    return connectToGraph(new ElevatorAlightEdge(from, to, null));
+  }
+
+  public static ElevatorAlightEdge createElevatorAlightEdge(
+    ElevatorHopVertex from,
+    Vertex to,
+    I18NString customName
+  ) {
+    return connectToGraph(new ElevatorAlightEdge(from, to, customName));
   }
 
   @Override
@@ -53,7 +69,7 @@ public class ElevatorAlightEdge extends Edge implements BikeWalkableEdge, Elevat
 
   @Override
   public I18NString getName() {
-    return NAME;
+    return customName != null ? customName : NAME;
   }
 
   @Override

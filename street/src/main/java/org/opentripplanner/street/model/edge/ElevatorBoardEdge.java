@@ -22,13 +22,24 @@ public class ElevatorBoardEdge extends Edge implements BikeWalkableEdge, Elevato
    */
   private final LineString geometry;
 
-  private ElevatorBoardEdge(Vertex from, ElevatorHopVertex to) {
+  private final I18NString customName;
+
+  private ElevatorBoardEdge(Vertex from, ElevatorHopVertex to, I18NString customName) {
     super(from, to);
+    this.customName = customName;
     geometry = GeometryUtils.makeLineString(from.getX(), from.getY(), to.getX(), to.getY());
   }
 
   public static ElevatorBoardEdge createElevatorBoardEdge(Vertex from, ElevatorHopVertex to) {
-    return connectToGraph(new ElevatorBoardEdge(from, to));
+    return connectToGraph(new ElevatorBoardEdge(from, to, null));
+  }
+
+  public static ElevatorBoardEdge createElevatorBoardEdge(
+    Vertex from,
+    ElevatorHopVertex to,
+    I18NString customName
+  ) {
+    return connectToGraph(new ElevatorBoardEdge(from, to, customName));
   }
 
   @Override
@@ -50,7 +61,7 @@ public class ElevatorBoardEdge extends Edge implements BikeWalkableEdge, Elevato
   @Override
   public I18NString getName() {
     // TODO: i18n
-    return new NonLocalizedString("ElevatorBoardEdge");
+    return customName != null ? customName : new NonLocalizedString("ElevatorBoardEdge");
   }
 
   /**
