@@ -232,7 +232,16 @@ public class AddTransitEntitiesToGraph {
    */
   static int effectiveStairCount(Pathway pathway) {
     int stairCount = pathway.getStairCount();
-    if (stairCount == 0 && pathway.getPathwayMode() == PathwayMode.STAIRS) {
+    if (
+      stairCount == 0 &&
+      (pathway.getPathwayMode() == PathwayMode.STAIRS ||
+        pathway.getPathwayMode() == PathwayMode.ESCALATOR)
+    ) {
+      // A wheelchair can no more ride an escalator than climb stairs, but
+      // escalator pathways carried only the generic inaccessible penalty —
+      // cheap enough to "transfer" to an elevator-less platform (Union Sq
+      // mezzanine escalators to the 4/5/6). Floor both so stairsReluctance
+      // engages.
       return 16;
     }
     return stairCount;

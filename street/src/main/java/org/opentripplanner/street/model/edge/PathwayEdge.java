@@ -106,6 +106,16 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
       }
     }
 
+    if (s0.getRequest().wheelchairEnabled() && isStairs()) {
+      // Station stairs are impassable to a wheelchair, not merely slow. A
+      // reluctance keeps stair pathways on the pareto frontier whenever they
+      // are time-fastest (Union Sq: alight the L, walk the street, take the
+      // stairs down to the elevator-less 4/5/6), so soft costs cannot express
+      // "there is no elevator to this platform". Hard-refuse; the feed
+      // guarantees census-accessible platforms a step-free chain.
+      return State.empty();
+    }
+
     if (time_ms > 0) {
       double weight = time_ms / 1000.0;
       if (s0.getRequest().wheelchairEnabled()) {
