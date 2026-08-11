@@ -259,8 +259,8 @@ public class AddTransitEntitiesToGraph {
   ) {
     StreetTraversalPermission permission = StreetTraversalPermission.PEDESTRIAN_AND_BICYCLE;
     int traversalTime = pathway.getTraversalTime();
-    StopLevel fromLevel = findStopLevel(fromVertex);
-    StopLevel toLevel = findStopLevel(toVertex);
+    StopLevel fromLevel = findStopLevel(pathway.getFromStop());
+    StopLevel toLevel = findStopLevel(pathway.getToStop());
     double levels = 1;
     if (fromLevel != null && toLevel != null && fromLevel.index() != toLevel.index()) {
       levels = Math.abs(fromLevel.index() - toLevel.index());
@@ -365,14 +365,26 @@ public class AddTransitEntitiesToGraph {
   @Nullable
   public StopLevel findStopLevel(StationElementVertex vertex) {
     var stop = dataImport.siteRepository().getRegularStop(vertex.getId());
-    if (stop == null || stop.level() == null) {
+    return stop == null ? null : normalizedLevel(stop.level());
+  }
+
+  /**
+   * GTFS permits level_id on every stops.txt location type, and levels are
+   * required precisely for elevator pathways — but the vertex-based lookup
+   * above only resolves regular stops, dropping levels for pathway nodes and
+   * entrances (a feed's mezzanine node). Read the station element directly.
+   */
+  public StopLevel findStopLevel(StationElement<?, ?> element) {
+    return element == null ? null : normalizedLevel(element.level());
+  }
+
+  private static StopLevel normalizedLevel(StopLevel level) {
+    if (level == null) {
       return null;
-    } else {
-      var level = stop.level();
-      return new StopLevel(
-        Objects.requireNonNullElse(level.name(), String.valueOf(level.index())),
-        level.index()
-      );
     }
+    return new StopLevel(
+      Objects.requireNonNullElse(level.name(), String.valueOf(level.index())),
+      level.index()
+    );
   }
 }
