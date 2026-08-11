@@ -22,6 +22,7 @@ import org.opentripplanner.street.model.edge.AreaEdge;
 import org.opentripplanner.street.model.edge.AreaGroup;
 import org.opentripplanner.street.model.edge.Edge;
 import org.opentripplanner.street.model.edge.StreetEdge;
+import org.opentripplanner.street.model.vertex.StationElementVertex;
 import org.opentripplanner.street.model.vertex.StreetVertex;
 import org.opentripplanner.street.model.vertex.TransitStopVertex;
 import org.opentripplanner.street.model.vertex.Vertex;
@@ -306,7 +307,14 @@ public class PruneIslands implements GraphBuilderModule {
     StreetSearchRequest request = StreetSearchRequest.of().withMode(streetMode).build();
 
     for (Vertex gv : graph.getVertices()) {
-      if (!(gv instanceof StreetVertex)) {
+      // Station elements seed connectivity too: a pathway network reaches the
+      // mainland through its entrance links, but only if the edges between
+      // entrances, pathway nodes and stops are actually traversed here.
+      // Seeding only StreetVertex leaves interiors invisible except for
+      // elevator vertices (which are street vertices) — an elevator that is
+      // not directly at a street-linked entrance then forms a phantom island
+      // whose stops get every edge removed by restrictOrRemove.
+      if (!(gv instanceof StreetVertex || gv instanceof StationElementVertex)) {
         continue;
       }
       State s0 = new State(gv, request);
