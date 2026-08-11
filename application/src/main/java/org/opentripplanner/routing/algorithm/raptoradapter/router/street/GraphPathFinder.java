@@ -65,7 +65,10 @@ class GraphPathFinder {
 
     var requestBuilder = StreetSearchRequestMapper.map(request)
       .withExtensionRequestContexts(extensionRequestContexts)
-      .withMode(request.journey().direct().mode());
+      .withMode(request.journey().direct().mode())
+      // Street-only itineraries must not cut through a station's fare-paid
+      // area; transit access/egress/transfer searches keep gates cheap.
+      .withPenalizeFareGates(true);
 
     // For arriveBy rental searches, precompute geofencing zones at the destination
     // so initial renting states have correct zone membership for boundary-based tracking.

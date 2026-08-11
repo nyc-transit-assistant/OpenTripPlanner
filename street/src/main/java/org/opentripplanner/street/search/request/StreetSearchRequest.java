@@ -33,6 +33,7 @@ public class StreetSearchRequest implements AStarRequest {
   private final StreetMode mode;
   private final boolean arriveBy;
   private final boolean wheelchair;
+  private final boolean penalizeFareGates;
 
   private final Envelope fromEnvelope;
   private final Envelope toEnvelope;
@@ -68,6 +69,7 @@ public class StreetSearchRequest implements AStarRequest {
     this.mode = StreetMode.WALK;
     this.arriveBy = false;
     this.wheelchair = false;
+    this.penalizeFareGates = false;
     this.fromEnvelope = null;
     this.toEnvelope = null;
     this.geoidElevation = false;
@@ -90,6 +92,7 @@ public class StreetSearchRequest implements AStarRequest {
     this.mode = builder.mode;
     this.arriveBy = builder.arriveBy;
     this.wheelchair = builder.wheelchairEnabled;
+    this.penalizeFareGates = builder.penalizeFareGates;
     this.fromEnvelope = builder.fromEnvelope;
     this.toEnvelope = builder.toEnvelope;
     this.geoidElevation = builder.geoidElevation;
@@ -136,6 +139,16 @@ public class StreetSearchRequest implements AStarRequest {
 
   public boolean geoidElevation() {
     return geoidElevation;
+  }
+
+  /**
+   * Direct (street-only) searches price fare-gate pathways so routes do not
+   * cut through a station's fare-paid area as a walking shortcut. Transit
+   * searches leave this off: access, egress and transfers legitimately pass
+   * one gate.
+   */
+  public boolean penalizeFareGates() {
+    return penalizeFareGates;
   }
 
   /**

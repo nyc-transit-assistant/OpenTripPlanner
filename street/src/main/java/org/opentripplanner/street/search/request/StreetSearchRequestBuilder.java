@@ -18,6 +18,7 @@ public class StreetSearchRequestBuilder {
   StreetMode mode;
   boolean arriveBy;
   boolean wheelchairEnabled;
+  boolean penalizeFareGates;
   Envelope fromEnvelope;
   Envelope toEnvelope;
   boolean geoidElevation;
@@ -42,6 +43,7 @@ public class StreetSearchRequestBuilder {
     this.mode = original.mode();
     this.arriveBy = original.arriveBy();
     this.wheelchairEnabled = original.wheelchairEnabled();
+    this.penalizeFareGates = original.penalizeFareGates();
     this.fromEnvelope = original.fromEnvelope();
     this.toEnvelope = original.toEnvelope();
     this.geoidElevation = original.geoidElevation();
@@ -71,6 +73,11 @@ public class StreetSearchRequestBuilder {
 
   public StreetSearchRequestBuilder withArriveBy(boolean arriveBy) {
     this.arriveBy = arriveBy;
+    return this;
+  }
+
+  public StreetSearchRequestBuilder withPenalizeFareGates(boolean penalizeFareGates) {
+    this.penalizeFareGates = penalizeFareGates;
     return this;
   }
 

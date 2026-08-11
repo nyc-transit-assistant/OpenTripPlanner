@@ -20,6 +20,15 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
 
   public static final I18NString DEFAULT_NAME = new NonLocalizedString("pathway");
 
+  /**
+   * Weight added per fare gate in direct (street-only) searches. Crossing a
+   * station entrance-to-entrance passes two gates, so a cut-through pays
+   * twice this — enough to kill save-a-corner shortcuts through fare control
+   * while a genuinely superior passage (multiple minutes saved) remains
+   * routable.
+   */
+  public static final double FARE_GATE_DIRECT_WEIGHT = 300;
+
   @Nullable
   private final I18NString signpostedAs;
 
@@ -29,6 +38,7 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
   private final double slope;
 
   private final boolean wheelchairAccessible;
+  private final boolean fareGate;
 
   private PathwayEdge(
     Vertex fromv,
@@ -38,7 +48,8 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
     double distance,
     int steps,
     double slope,
-    boolean wheelchairAccessible
+    boolean wheelchairAccessible,
+    boolean fareGate
   ) {
     super(fromv, tov);
     this.signpostedAs = signpostedAs;
@@ -47,6 +58,7 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
     this.slope = slope;
     this.wheelchairAccessible = wheelchairAccessible;
     this.distance = distance;
+    this.fareGate = fareGate;
   }
 
   /**
@@ -72,6 +84,30 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
     double slope,
     boolean wheelchairAccessible
   ) {
+    return createPathwayEdge(
+      fromv,
+      tov,
+      signpostedAs,
+      traversalTime,
+      distance,
+      steps,
+      slope,
+      wheelchairAccessible,
+      false
+    );
+  }
+
+  public static PathwayEdge createPathwayEdge(
+    Vertex fromv,
+    Vertex tov,
+    I18NString signpostedAs,
+    int traversalTime,
+    double distance,
+    int steps,
+    double slope,
+    boolean wheelchairAccessible,
+    boolean fareGate
+  ) {
     return connectToGraph(
       new PathwayEdge(
         fromv,
@@ -81,7 +117,8 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
         distance,
         steps,
         slope,
-        wheelchairAccessible
+        wheelchairAccessible,
+        fareGate
       )
     );
   }
@@ -114,6 +151,10 @@ public class PathwayEdge extends Edge implements BikeWalkableEdge, WheelchairTra
       // "there is no elevator to this platform". Hard-refuse; the feed
       // guarantees census-accessible platforms a step-free chain.
       return State.empty();
+    }
+
+    if (fareGate && s0.getRequest().penalizeFareGates()) {
+      s1.incrementWeight(FARE_GATE_DIRECT_WEIGHT);
     }
 
     if (time_ms > 0) {

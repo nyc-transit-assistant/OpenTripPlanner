@@ -190,6 +190,7 @@ public class AddTransitEntitiesToGraph {
             .filter(l -> l > 0)
             .orElseGet(() -> distance(fromVertex.getCoordinate(), toVertex.getCoordinate()));
           int stairCount = effectiveStairCount(pathway);
+          boolean fareGate = pathway.getPathwayMode() == PathwayMode.FARE_GATE;
 
           PathwayEdge.createPathwayEdge(
             fromVertex,
@@ -199,7 +200,8 @@ public class AddTransitEntitiesToGraph {
             distance,
             stairCount,
             pathway.getSlope(),
-            pathway.isPathwayModeWheelchairAccessible()
+            pathway.isPathwayModeWheelchairAccessible(),
+            fareGate
           );
           if (pathway.isBidirectional()) {
             PathwayEdge.createPathwayEdge(
@@ -210,7 +212,8 @@ public class AddTransitEntitiesToGraph {
               distance,
               -1 * stairCount,
               -1 * pathway.getSlope(),
-              pathway.isPathwayModeWheelchairAccessible()
+              pathway.isPathwayModeWheelchairAccessible(),
+              fareGate
             );
           }
         }
