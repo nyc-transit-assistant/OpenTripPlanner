@@ -352,6 +352,9 @@ public class GraphQLDataFetchers {
 
   /** A single use of an elevator. */
   public interface GraphQLElevatorUse {
+    // equipmentId/operational manually added for the NYC fork (station equipment registry).
+    public DataFetcher<String> equipmentId();
+    public DataFetcher<Boolean> operational();
     public DataFetcher<Level> from();
     public DataFetcher<Level> to();
     public DataFetcher<GraphQLVerticalDirection> verticalDirection();
@@ -362,8 +365,28 @@ public class GraphQLDataFetchers {
   }
 
   /** Station entrance or exit, originating from OSM or GTFS data. */
+  // Manually added for the NYC fork's station equipment registry.
+  public interface GraphQLStationEquipment {
+    public DataFetcher<String> id();
+    public DataFetcher<String> code();
+    public DataFetcher<
+      org.opentripplanner.apis.gtfs.generated.GraphQLTypes.GraphQLEquipmentType
+    > type();
+    public DataFetcher<String> serving();
+    public DataFetcher<Boolean> ada();
+    public DataFetcher<Boolean> routable();
+    public DataFetcher<Boolean> operational();
+    public DataFetcher<Object> stop();
+    public DataFetcher<Iterable<org.opentripplanner.transit.model.site.Entrance>> entrances();
+  }
+
   public interface GraphQLEntrance {
     public DataFetcher<String> entranceId();
+    // equipment manually added for the NYC fork's station equipment registry; regenerate-and-diff
+    // when the pinned graphql-codegen version is realigned with these checked-in files.
+    public DataFetcher<
+      Iterable<org.opentripplanner.transit.model.site.StationEquipment>
+    > equipment();
     // lat/lon manually added for the NYC fork's entrance coordinates; regenerate-and-diff
     // when the pinned graphql-codegen version is realigned with these checked-in files.
     public DataFetcher<Double> lat();
@@ -377,6 +400,9 @@ public class GraphQLDataFetchers {
 
   /** A single use of an escalator. */
   public interface GraphQLEscalatorUse {
+    // equipmentId/operational manually added for the NYC fork (station equipment registry).
+    public DataFetcher<String> equipmentId();
+    public DataFetcher<Boolean> operational();
     public DataFetcher<Level> from();
     public DataFetcher<Level> to();
     public DataFetcher<GraphQLVerticalDirection> verticalDirection();
@@ -708,6 +734,10 @@ public class GraphQLDataFetchers {
   }
 
   public interface GraphQLQueryType {
+    // stationEquipment manually added for the NYC fork's station equipment registry.
+    public DataFetcher<
+      Iterable<org.opentripplanner.transit.model.site.StationEquipment>
+    > stationEquipment();
     public DataFetcher<Iterable<Agency>> agencies();
     public DataFetcher<Agency> agency();
     public DataFetcher<Iterable<TransitAlert>> alerts();
@@ -909,6 +939,10 @@ public class GraphQLDataFetchers {
    * See field `locationType`.
    */
   public interface GraphQLStop {
+    // equipment manually added for the NYC fork's station equipment registry.
+    public DataFetcher<
+      Iterable<org.opentripplanner.transit.model.site.StationEquipment>
+    > equipment();
     public DataFetcher<Iterable<TransitAlert>> alerts();
     public DataFetcher<Iterable<StopCallOnTripOnServiceDate>> canceledCalls();
     public DataFetcher<Object> cluster();

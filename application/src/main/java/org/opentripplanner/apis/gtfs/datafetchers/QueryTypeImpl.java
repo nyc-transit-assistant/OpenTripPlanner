@@ -675,6 +675,36 @@ public class QueryTypeImpl implements GraphQLDataFetchers.GraphQLQueryType {
   }
 
   @Override
+  public DataFetcher<
+    Iterable<org.opentripplanner.transit.model.site.StationEquipment>
+  > stationEquipment() {
+    return environment -> {
+      var args = new GraphQLTypes.GraphQLQueryTypeStationEquipmentArgs(environment.getArguments());
+      TransitService transitService = getTransitService(environment);
+      var stream = transitService.listStationEquipment().stream();
+      if (args.getGraphQLIds() != null) {
+        var wanted = args
+          .getGraphQLIds()
+          .stream()
+          .filter(Objects::nonNull)
+          .flatMap(id -> FeedScopedId.parseOptional(id).stream())
+          .collect(Collectors.toSet());
+        stream = stream.filter(e -> wanted.contains(e.id()));
+      }
+      if (args.getGraphQLStopIds() != null) {
+        var wanted = args
+          .getGraphQLStopIds()
+          .stream()
+          .filter(Objects::nonNull)
+          .flatMap(id -> FeedScopedId.parseOptional(id).stream())
+          .collect(Collectors.toSet());
+        stream = stream.filter(e -> e.stationId() != null && wanted.contains(e.stationId()));
+      }
+      return stream.sorted(java.util.Comparator.comparing(e -> e.id().toString())).toList();
+    };
+  }
+
+  @Override
   public DataFetcher<Iterable<Object>> stations() {
     return environment -> {
       var args = new GraphQLTypes.GraphQLQueryTypeStationsArgs(environment.getArguments());

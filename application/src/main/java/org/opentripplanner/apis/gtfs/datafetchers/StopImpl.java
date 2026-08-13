@@ -219,6 +219,23 @@ public class StopImpl implements GraphQLDataFetchers.GraphQLStop {
   }
 
   @Override
+  public DataFetcher<
+    Iterable<org.opentripplanner.transit.model.site.StationEquipment>
+  > equipment() {
+    return environment -> {
+      var transitService = getTransitService(environment);
+      return getValue(
+        environment,
+        stop -> {
+          var parentStation = stop.getParentStation();
+          return parentStation == null ? null : transitService.findStationEquipment(parentStation);
+        },
+        transitService::findStationEquipment
+      );
+    };
+  }
+
+  @Override
   public DataFetcher<Iterable<Entrance>> entrances() {
     return environment -> {
       var transitService = getTransitService(environment);

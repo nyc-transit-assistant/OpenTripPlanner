@@ -4408,6 +4408,34 @@ public class GraphQLTypes {
     }
   }
 
+  // Manually added for the NYC fork's station equipment registry.
+  public enum GraphQLEquipmentType {
+    ELEVATOR,
+    ESCALATOR,
+  }
+
+  // Manually added for the NYC fork's station equipment registry.
+  public static class GraphQLQueryTypeStationEquipmentArgs {
+
+    private List<String> ids;
+    private List<String> stopIds;
+
+    public GraphQLQueryTypeStationEquipmentArgs(Map<String, Object> args) {
+      if (args != null) {
+        this.ids = (List<String>) args.get("ids");
+        this.stopIds = (List<String>) args.get("stopIds");
+      }
+    }
+
+    public List<String> getGraphQLIds() {
+      return this.ids;
+    }
+
+    public List<String> getGraphQLStopIds() {
+      return this.stopIds;
+    }
+  }
+
   public static class GraphQLQueryTypeStationsArgs {
 
     private List<String> ids;

@@ -574,6 +574,15 @@ type ElevatorUse {
   "The level the use ends at."
   to: Level
   verticalDirection: VerticalDirection!
+  """
+  Operator unit code of the elevator (e.g. `EL359`), matching `StationEquipment.code`.
+  """
+  equipmentId: String
+  """
+  Whether the unit is currently in service. Always `null` until a realtime equipment status
+  source is configured; `null` means unknown, never "working".
+  """
+  operational: Boolean
 }
 
 type Emissions {
@@ -595,6 +604,11 @@ type Entrance {
   publicCode: String
   "Whether the entrance or exit is accessible by wheelchair"
   wheelchairAccessible: WheelchairBoarding
+  """
+  Elevator/escalator units physically serving this entrance (e.g. a street elevator
+  headhouse). Empty for plain stair entrances.
+  """
+  equipment: [StationEquipment!]!
 }
 
 "A single use of an escalator."
@@ -604,6 +618,53 @@ type EscalatorUse {
   "The level the use ends at."
   to: Level
   verticalDirection: VerticalDirection!
+  """
+  Operator unit code of the escalator (e.g. `ES115`), matching `StationEquipment.code`.
+  Currently only populated for units modeled as station pathways.
+  """
+  equipmentId: String
+  """
+  Whether the unit is currently in service. Always `null` until a realtime equipment status
+  source is configured; `null` means unknown, never "working".
+  """
+  operational: Boolean
+}
+
+"The kind of a station equipment unit."
+enum EquipmentType {
+  ELEVATOR
+  ESCALATOR
+}
+
+"""
+An elevator or escalator unit at a station, keyed by the operator's equipment code
+(e.g. MTA E&E `EL359`). Built from station pathways and the feed's `equipment.txt`
+extension file.
+"""
+type StationEquipment {
+  "Feed-scoped id in the format `FeedId:Code`, e.g. `mta-subway:EL359`."
+  id: String!
+  "The operator's unit code, e.g. `EL359` — the join key for realtime status."
+  code: String!
+  type: EquipmentType!
+  "Operator prose describing what the unit serves, e.g. `mezzanine to Manhattan-bound platform`."
+  serving: String
+  """
+  Whether the unit is ADA-compliant per the operator's equipment registry. `null` when the
+  registry does not know the unit.
+  """
+  ada: Boolean
+  "True when at least one pathway in the graph is served by this unit."
+  routable: Boolean!
+  """
+  Whether the unit is currently in service. Always `null` until a realtime equipment status
+  source is configured; `null` means unknown, never "working".
+  """
+  operational: Boolean
+  "The station this unit belongs to."
+  stop: Stop
+  "Entrances this unit serves directly (e.g. a street elevator headhouse)."
+  entrances: [Entrance!]!
 }
 
 "Real-time estimates for an arrival or departure at a certain place."
@@ -2040,6 +2101,16 @@ type QueryType {
     "Query stations by name"
     name: String
   ): [Stop] @timingData
+  """
+  Get station elevator/escalator units. With no arguments, every registered unit is returned
+  (e.g. for a system-wide status dashboard).
+  """
+  stationEquipment(
+    "Only return units with one of these feed-scoped ids (`FeedId:Code`, e.g. `mta-subway:EL359`)"
+    ids: [String!],
+    "Only return units belonging to one of these stations (feed-scoped stop ids)"
+    stopIds: [String!]
+  ): [StationEquipment!]! @timingData
   "Get a single stop based on its ID, i.e. value of field `gtfsId` (ID format is `FeedId:StopId`)"
   stop(id: String!): Stop @timingData
   "Get all stops"
@@ -2457,6 +2528,12 @@ type Stop implements Node & PlaceInterface {
   part of a station; an empty list when the station has no entrances in the input data.
   """
   entrances: [Entrance!]
+  """
+  Elevator/escalator units of this station. For a station, its own units; for a stop that is
+  part of a station, the parent station's units. `null` when the stop is not part of a
+  station; an empty list when no units are known.
+  """
+  equipment: [StationEquipment!]
   """
   Representations of this stop's geometry. This is mainly interesting for flex stops which can be
   a polygon or a group of stops either consisting of either points or polygons.

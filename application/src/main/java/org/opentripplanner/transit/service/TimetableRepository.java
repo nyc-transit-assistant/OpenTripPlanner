@@ -46,6 +46,7 @@ import org.opentripplanner.transit.model.organization.Agency;
 import org.opentripplanner.transit.model.organization.Operator;
 import org.opentripplanner.transit.model.site.GroupStop;
 import org.opentripplanner.transit.model.site.RegularStop;
+import org.opentripplanner.transit.model.site.StationEquipment;
 import org.opentripplanner.transit.model.site.StopLocation;
 import org.opentripplanner.transit.model.timetable.TripOnServiceDate;
 import org.opentripplanner.transit.model.timetable.TripTimes;
@@ -120,6 +121,8 @@ public class TimetableRepository implements Serializable {
   private transient TransitAlertService transitAlertService;
 
   private final Map<FeedScopedId, RegularStop> stopsByScheduledStopPointRefs = new HashMap<>();
+
+  private final List<StationEquipment> stationEquipment = new ArrayList<>();
 
   /// Updates are not allowed after the repository is frozen. All realtime updates should be
   /// applied to the TimetableSnapshot. The repository is modifiable during graph build then
@@ -354,6 +357,19 @@ public class TimetableRepository implements Serializable {
     assertModificationsAllowed();
     invalidateIndex();
     this.noticesByElement.putAll(noticesByElement);
+  }
+
+  /**
+   * Register elevator/escalator units for a feed (see {@link StationEquipment}). Called once per
+   * GTFS bundle during graph build; empty for feeds without equipment data.
+   */
+  public void addStationEquipment(Collection<StationEquipment> equipment) {
+    assertModificationsAllowed();
+    this.stationEquipment.addAll(equipment);
+  }
+
+  public List<StationEquipment> getStationEquipment() {
+    return Collections.unmodifiableList(stationEquipment);
   }
 
   /**

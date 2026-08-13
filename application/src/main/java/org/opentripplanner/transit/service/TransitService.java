@@ -41,6 +41,7 @@ import org.opentripplanner.transit.model.site.GroupStop;
 import org.opentripplanner.transit.model.site.MultiModalStation;
 import org.opentripplanner.transit.model.site.RegularStop;
 import org.opentripplanner.transit.model.site.Station;
+import org.opentripplanner.transit.model.site.StationEquipment;
 import org.opentripplanner.transit.model.site.StopLocation;
 import org.opentripplanner.transit.model.site.StopLocationsGroup;
 import org.opentripplanner.transit.model.timetable.Timetable;
@@ -154,6 +155,15 @@ public interface TransitService {
    * Return all entrances whose parent station is the given station.
    */
   Collection<Entrance> findEntrances(Station station);
+
+  /** All registered elevator/escalator units (see {@link StationEquipment}). */
+  List<StationEquipment> listStationEquipment();
+
+  /** Elevator/escalator units belonging to the given station, ordered by unit code. */
+  List<StationEquipment> findStationEquipment(Station station);
+
+  /** Elevator/escalator units with a pathway endpoint at the given entrance. */
+  List<StationEquipment> findStationEquipmentAtEntrance(FeedScopedId entranceId);
 
   /**
    * Gets the area stop with the given id and throws an exception if it was not found.

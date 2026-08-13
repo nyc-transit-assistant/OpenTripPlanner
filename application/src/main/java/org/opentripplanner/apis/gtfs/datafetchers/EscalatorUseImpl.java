@@ -10,6 +10,17 @@ import org.opentripplanner.service.streetdetails.model.Level;
 public class EscalatorUseImpl implements GraphQLDataFetchers.GraphQLEscalatorUse {
 
   @Override
+  public DataFetcher<String> equipmentId() {
+    return environment -> null;
+  }
+
+  @Override
+  public DataFetcher<Boolean> operational() {
+    // Phase 1: no realtime equipment status source is wired; null means unknown.
+    return environment -> null;
+  }
+
+  @Override
   public DataFetcher<Level> from() {
     return environment -> {
       EscalatorUse escalatorUse = environment.getSource();

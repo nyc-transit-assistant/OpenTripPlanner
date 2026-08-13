@@ -58,6 +58,7 @@ import org.opentripplanner.transit.model.site.GroupStop;
 import org.opentripplanner.transit.model.site.MultiModalStation;
 import org.opentripplanner.transit.model.site.RegularStop;
 import org.opentripplanner.transit.model.site.Station;
+import org.opentripplanner.transit.model.site.StationEquipment;
 import org.opentripplanner.transit.model.site.StopLocation;
 import org.opentripplanner.transit.model.site.StopLocationsGroup;
 import org.opentripplanner.transit.model.timetable.Timetable;
@@ -230,6 +231,29 @@ public class DefaultTransitService implements TransitEditorService {
   @Override
   public Collection<Entrance> findEntrances(Station station) {
     return this.timetableRepository.getSiteRepository().findEntrances(station);
+  }
+
+  @Override
+  public List<StationEquipment> listStationEquipment() {
+    return this.timetableRepository.getStationEquipment();
+  }
+
+  @Override
+  public List<StationEquipment> findStationEquipment(Station station) {
+    return this.timetableRepository.getStationEquipment()
+      .stream()
+      .filter(e -> station.getId().equals(e.stationId()))
+      .sorted(Comparator.comparing(StationEquipment::code))
+      .toList();
+  }
+
+  @Override
+  public List<StationEquipment> findStationEquipmentAtEntrance(FeedScopedId entranceId) {
+    return this.timetableRepository.getStationEquipment()
+      .stream()
+      .filter(e -> e.entranceIds().contains(entranceId))
+      .sorted(Comparator.comparing(StationEquipment::code))
+      .toList();
   }
 
   @Override

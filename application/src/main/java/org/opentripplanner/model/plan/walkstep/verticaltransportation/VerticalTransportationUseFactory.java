@@ -17,6 +17,10 @@ import org.opentripplanner.street.search.state.State;
  */
 public class VerticalTransportationUseFactory {
 
+  private static final java.util.regex.Pattern EQUIPMENT_CODE = java.util.regex.Pattern.compile(
+    "^((?:EL|ES)\\d+X?)\\b"
+  );
+
   private final StreetDetailsService streetDetailsService;
 
   public VerticalTransportationUseFactory(StreetDetailsService streetDetailsService) {
@@ -31,6 +35,7 @@ public class VerticalTransportationUseFactory {
       );
     }
 
+    String code = equipmentCode(elevatorBoardEdge);
     Optional<Level> boardEdgeLevelOptional = streetDetailsService.findHorizontalEdgeLevelInfo(
       elevatorBoardEdge
     );
@@ -46,13 +51,24 @@ public class VerticalTransportationUseFactory {
       } else if (boardEdgeLevel.level() < alightEdgeLevel.level()) {
         verticalDirection = VerticalDirection.UP;
       }
-      return new ElevatorUse(boardEdgeLevel, alightEdgeLevel, verticalDirection);
+      return new ElevatorUse(boardEdgeLevel, alightEdgeLevel, verticalDirection, code);
     } else if (boardEdgeLevelOptional.isPresent()) {
-      return new ElevatorUse(boardEdgeLevelOptional.get(), null, VerticalDirection.UNKNOWN);
+      return new ElevatorUse(boardEdgeLevelOptional.get(), null, VerticalDirection.UNKNOWN, code);
     } else if (alightEdgeLevelOptional.isPresent()) {
-      return new ElevatorUse(null, alightEdgeLevelOptional.get(), VerticalDirection.UNKNOWN);
+      return new ElevatorUse(null, alightEdgeLevelOptional.get(), VerticalDirection.UNKNOWN, code);
     }
-    return new ElevatorUse(null, null, VerticalDirection.UNKNOWN);
+    return new ElevatorUse(null, null, VerticalDirection.UNKNOWN, code);
+  }
+
+  /** Operator unit code at the head of an elevator's signposted name ("EL359 — ..."). */
+  @Nullable
+  private static String equipmentCode(ElevatorBoardEdge boardEdge) {
+    var name = boardEdge.getName();
+    if (name == null) {
+      return null;
+    }
+    var matcher = EQUIPMENT_CODE.matcher(name.toString());
+    return matcher.find() ? matcher.group(1) : null;
   }
 
   public EscalatorUse createEscalatorUse(Edge edge) {

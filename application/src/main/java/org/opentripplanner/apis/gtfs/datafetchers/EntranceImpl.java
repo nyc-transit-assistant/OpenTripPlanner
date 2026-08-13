@@ -9,6 +9,19 @@ import org.opentripplanner.transit.model.site.Entrance;
 public class EntranceImpl implements GraphQLDataFetchers.GraphQLEntrance {
 
   @Override
+  public DataFetcher<
+    Iterable<org.opentripplanner.transit.model.site.StationEquipment>
+  > equipment() {
+    return environment -> {
+      Entrance entrance = environment.getSource();
+      return environment
+        .<org.opentripplanner.apis.gtfs.GraphQLRequestContext>getContext()
+        .transitService()
+        .findStationEquipmentAtEntrance(entrance.getId());
+    };
+  }
+
+  @Override
   public DataFetcher<String> publicCode() {
     return environment -> {
       Entrance entrance = environment.getSource();

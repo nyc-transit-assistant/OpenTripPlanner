@@ -26,6 +26,7 @@ import org.opentripplanner.graph_builder.issue.api.DataImportIssueStore;
 import org.opentripplanner.graph_builder.model.GraphBuilderModule;
 import org.opentripplanner.graph_builder.module.AddTransitEntitiesToGraph;
 import org.opentripplanner.graph_builder.module.AddTransitEntitiesToTimetable;
+import org.opentripplanner.graph_builder.module.StationEquipmentMapper;
 import org.opentripplanner.graph_builder.module.TransitWithFutureDateValidator;
 import org.opentripplanner.graph_builder.module.ValidateAndInterpolateStopTimesForEachTrip;
 import org.opentripplanner.graph_builder.module.geometry.GeometryProcessor;
@@ -193,6 +194,14 @@ public class GtfsModule implements GraphBuilderModule {
           timetableRepository,
           streetDetailsRepository,
           dataImport
+        );
+
+        timetableRepository.addStationEquipment(
+          StationEquipmentMapper.map(
+            feedId,
+            gtfsBundle.getCsvInputSource(),
+            dataImport.getAllPathways()
+          )
         );
 
         if (gtfsBundle.parameters().blockBasedInterlining()) {
