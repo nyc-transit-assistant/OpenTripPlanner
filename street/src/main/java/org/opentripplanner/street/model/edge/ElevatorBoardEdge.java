@@ -26,8 +26,12 @@ public class ElevatorBoardEdge extends Edge implements BikeWalkableEdge, Elevato
 
   private final I18NString customName;
 
-  /** Matches operator unit codes signposted on station elevator pathways, e.g. {@code EL359}. */
-  private static final Pattern EQUIPMENT_CODE = Pattern.compile("^(EL|ES)\\d+X?$");
+  /**
+   * Matches the operator unit code at the START of a signposted station elevator pathway name
+   * ("EL131 elevator to mezzanine") — prefix, not full match, mirroring the itinerary mapper's
+   * ElevatorUse code extraction so edge blocking and API reporting agree on the same unit.
+   */
+  private static final Pattern EQUIPMENT_CODE = Pattern.compile("^((?:EL|ES)\\d+X?)\\b");
 
   /**
    * The operator's unit code when this edge was built from a signposted station elevator
@@ -49,8 +53,8 @@ public class ElevatorBoardEdge extends Edge implements BikeWalkableEdge, Elevato
     if (name == null) {
       return null;
     }
-    var text = name.toString().trim();
-    return EQUIPMENT_CODE.matcher(text).matches() ? text : null;
+    var matcher = EQUIPMENT_CODE.matcher(name.toString().trim());
+    return matcher.find() ? matcher.group(1) : null;
   }
 
   @Nullable

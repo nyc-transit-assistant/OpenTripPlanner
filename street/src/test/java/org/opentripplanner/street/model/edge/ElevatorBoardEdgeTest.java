@@ -37,16 +37,19 @@ class ElevatorBoardEdgeTest {
 
   @Test
   void parsesSignpostedEquipmentCode() {
+    // Real signposts are prose starting with the code, not the bare code.
+    assertEquals("EL131", edge("EL131 elevator to mezzanine").equipmentCode());
     assertEquals("EL359", edge("EL359").equipmentCode());
-    assertEquals("ES115", edge("ES115").equipmentCode());
-    assertEquals("EL290X", edge("EL290X").equipmentCode());
+    assertEquals("ES115", edge("ES115 escalator to Manhattan-bound platform").equipmentCode());
+    assertEquals("EL290X", edge("EL290X to PATH concourse").equipmentCode());
     assertNull(edge("Track 12 elevator").equipmentCode());
+    assertNull(edge("ELEVATED walkway").equipmentCode());
     assertNull(edge(null).equipmentCode());
   }
 
   @Test
   void wheelchairSearchBlockedThroughInoperativeUnit() {
-    var result = traverse(edge("EL359"), true, Set.of("EL359", "EL100"));
+    var result = traverse(edge("EL359 elevator to street"), true, Set.of("EL359", "EL100"));
     assertTrue(State.isEmpty(result));
   }
 
