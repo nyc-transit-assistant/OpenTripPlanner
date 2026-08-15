@@ -16,7 +16,9 @@ public class EscalatorUseImpl implements GraphQLDataFetchers.GraphQLEscalatorUse
 
   @Override
   public DataFetcher<Boolean> operational() {
-    // Phase 1: no realtime equipment status source is wired; null means unknown.
+    // Escalator walk steps do not carry an equipment code yet (only elevators were wired in
+    // the equipment registry phase), so step-level status is unknown. Realtime escalator
+    // status is served at the station level via StationEquipment.operational.
     return environment -> null;
   }
 

@@ -23,6 +23,7 @@ import org.opentripplanner.routing.api.request.RouteRequest;
 import org.opentripplanner.routing.linking.LinkingContextFactory;
 import org.opentripplanner.routing.linking.VertexLinkerTestFactory;
 import org.opentripplanner.routing.linking.internal.VertexCreationService;
+import org.opentripplanner.service.equipmentstatus.internal.DefaultEquipmentStatusService;
 import org.opentripplanner.service.realtimevehicles.internal.DefaultRealtimeVehicleRepository;
 import org.opentripplanner.service.realtimevehicles.internal.DefaultRealtimeVehicleService;
 import org.opentripplanner.service.vehicleparking.internal.DefaultVehicleParkingRepository;
@@ -80,6 +81,7 @@ class _RouteRequestTestContext {
       transferService,
       new DefaultFareService(),
       new DefaultVehicleRentalService(),
+      new DefaultEquipmentStatusService(),
       new DefaultVehicleParkingService(new DefaultVehicleParkingRepository()),
       new DefaultRealtimeVehicleService(new DefaultRealtimeVehicleRepository(), transitService),
       SchemaFactory.createSchemaWithDefaultInjection(routeRequest),

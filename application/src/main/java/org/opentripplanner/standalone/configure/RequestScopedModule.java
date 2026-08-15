@@ -26,6 +26,7 @@ import org.opentripplanner.routing.algorithm.raptoradapter.transit.TripSchedule;
 import org.opentripplanner.routing.fares.FareService;
 import org.opentripplanner.routing.linking.LinkingContextFactory;
 import org.opentripplanner.routing.via.ViaCoordinateTransferFactory;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusService;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleRepository;
 import org.opentripplanner.service.streetdetails.StreetDetailsService;
 import org.opentripplanner.service.vehicleparking.VehicleParkingService;
@@ -76,6 +77,7 @@ public class RequestScopedModule {
   static OtpServerRequestContext serverRequestContext(
     RouterConfig routerConfig,
     DebugUiConfig debugUiConfig,
+    EquipmentStatusService equipmentStatusService,
     RaptorConfig<TripSchedule> raptorConfig,
     Graph graph,
     LinkingContextFactory linkingContextFactory,
@@ -115,6 +117,7 @@ public class RequestScopedModule {
 
     return new DefaultServerRequestContext(
       debugUiConfig,
+      equipmentStatusService,
       fareService,
       flexParameters,
       graph,

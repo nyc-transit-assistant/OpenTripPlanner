@@ -27,6 +27,7 @@ import org.opentripplanner.routing.algorithm.raptoradapter.transit.mappers.Rapto
 import org.opentripplanner.routing.api.response.RoutingResponse;
 import org.opentripplanner.routing.framework.DebugTimingAggregator;
 import org.opentripplanner.routing.linking.VertexLinkerTestFactory;
+import org.opentripplanner.service.equipmentstatus.internal.DefaultEquipmentStatusService;
 import org.opentripplanner.service.realtimevehicles.internal.DefaultRealtimeVehicleRepository;
 import org.opentripplanner.service.vehicleparking.internal.DefaultVehicleParkingRepository;
 import org.opentripplanner.service.vehiclerental.internal.DefaultVehicleRentalService;
@@ -148,6 +149,7 @@ public class SpeedTest {
       graph,
       DeduplicatorService.NOOP,
       VertexLinkerTestFactory.of(graph),
+      new DefaultEquipmentStatusService(),
       realtimeVehicleRepository,
       new DefaultVehicleRentalService(),
       new DefaultVehicleParkingRepository(),
@@ -176,6 +178,7 @@ public class SpeedTest {
 
     this.serverContext = new DefaultServerRequestContext(
       DebugUiConfig.DEFAULT,
+      new DefaultEquipmentStatusService(),
       new DefaultFareService(),
       routerConfig.flexParameters(),
       graph,

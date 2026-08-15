@@ -40,6 +40,10 @@ import org.opentripplanner.routing.linking.LinkingContextFactory;
 import org.opentripplanner.routing.linking.configure.LinkingServiceModule;
 import org.opentripplanner.routing.via.ViaCoordinateTransferFactory;
 import org.opentripplanner.routing.via.configure.ViaModule;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusRepository;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusService;
+import org.opentripplanner.service.equipmentstatus.configure.EquipmentStatusRepositoryModule;
+import org.opentripplanner.service.equipmentstatus.configure.EquipmentStatusServiceModule;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleRepository;
 import org.opentripplanner.service.realtimevehicles.configure.RealtimeVehicleRepositoryModule;
 import org.opentripplanner.service.streetdetails.StreetDetailsRepository;
@@ -92,6 +96,8 @@ import org.opentripplanner.warmup.configure.WarmupModule;
     InteractiveLauncherModule.class,
     StreetDetailsServiceModule.class,
     LinkingServiceModule.class,
+    EquipmentStatusRepositoryModule.class,
+    EquipmentStatusServiceModule.class,
     RealtimeVehicleRepositoryModule.class,
     RideHailingServicesModule.class,
     SchemaModule.class,
@@ -121,6 +127,8 @@ public interface ConstructApplicationFactory {
   WorldEnvelopeRepository worldEnvelopeRepository();
   WorldEnvelopeService worldEnvelopeService();
   RealtimeVehicleRepository realtimeVehicleRepository();
+  EquipmentStatusRepository equipmentStatusRepository();
+  EquipmentStatusService equipmentStatusService();
   VehicleRentalRepository vehicleRentalRepository();
   VehicleRentalService vehicleRentalService();
   VehicleParkingRepository vehicleParkingRepository();

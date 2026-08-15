@@ -1,6 +1,7 @@
 package org.opentripplanner.apis.gtfs.datafetchers;
 
 import graphql.schema.DataFetcher;
+import org.opentripplanner.apis.gtfs.GraphQLRequestContext;
 import org.opentripplanner.apis.gtfs.generated.GraphQLDataFetchers;
 import org.opentripplanner.apis.gtfs.generated.GraphQLTypes.GraphQLVerticalDirection;
 import org.opentripplanner.apis.gtfs.mapping.VerticalDirectionMapper;
@@ -19,8 +20,17 @@ public class ElevatorUseImpl implements GraphQLDataFetchers.GraphQLElevatorUse {
 
   @Override
   public DataFetcher<Boolean> operational() {
-    // Phase 1: no realtime equipment status source is wired; null means unknown.
-    return environment -> null;
+    return environment -> {
+      ElevatorUse elevatorUse = environment.getSource();
+      var code = elevatorUse.equipmentCode();
+      if (code == null) {
+        return null;
+      }
+      return environment
+        .<GraphQLRequestContext>getContext()
+        .equipmentStatusService()
+        .operational(code);
+    };
   }
 
   @Override

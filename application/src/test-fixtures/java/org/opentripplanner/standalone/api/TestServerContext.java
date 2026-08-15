@@ -26,6 +26,7 @@ import org.opentripplanner.routing.linking.VertexLinkerTestFactory;
 import org.opentripplanner.routing.linking.internal.VertexCreationService;
 import org.opentripplanner.routing.via.ViaCoordinateTransferFactory;
 import org.opentripplanner.routing.via.service.DefaultViaCoordinateTransferFactory;
+import org.opentripplanner.service.equipmentstatus.internal.DefaultEquipmentStatusService;
 import org.opentripplanner.service.realtimevehicles.internal.DefaultRealtimeVehicleRepository;
 import org.opentripplanner.service.streetdetails.StreetDetailsService;
 import org.opentripplanner.service.streetdetails.internal.DefaultStreetDetailsRepository;
@@ -192,6 +193,7 @@ public class TestServerContext {
 
     return new DefaultServerRequestContext(
       DebugUiConfig.DEFAULT,
+      new DefaultEquipmentStatusService(),
       fareService,
       flexParameters,
       graph,

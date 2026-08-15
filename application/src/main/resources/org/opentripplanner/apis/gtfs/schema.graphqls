@@ -574,8 +574,8 @@ type ElevatorUse {
   "The level the use begins at."
   from: Level
   """
-  Whether the unit is currently in service. Always `null` until a realtime equipment status
-  source is configured; `null` means unknown, never "working".
+  Whether the unit is currently in service, from the operator's realtime outage feed. `null`
+  means unknown: no updater configured, or the feed has gone stale — never "working".
   """
   operational: Boolean
   "The level the use ends at."
@@ -609,6 +609,16 @@ type Entrance {
   wheelchairAccessible: WheelchairBoarding
 }
 
+"A current out-of-service condition for an elevator/escalator unit."
+type EquipmentOutage {
+  "Operator's estimate of when the unit returns to service."
+  estimatedReturnToService: OffsetDateTime
+  "Operator-supplied cause, e.g. `Capital Replacement`, `Repair`."
+  reason: String
+  "When the unit went out of service."
+  since: OffsetDateTime
+}
+
 "A single use of an escalator."
 type EscalatorUse {
   """
@@ -619,8 +629,8 @@ type EscalatorUse {
   "The level the use begins at."
   from: Level
   """
-  Whether the unit is currently in service. Always `null` until a realtime equipment status
-  source is configured; `null` means unknown, never "working".
+  Whether the unit is currently in service, from the operator's realtime outage feed. `null`
+  means unknown: no updater configured, or the feed has gone stale — never "working".
   """
   operational: Boolean
   "The level the use ends at."
@@ -1380,6 +1390,16 @@ type PlanPageInfo {
   searchWindowUsed: Duration
   "When paginating backwards, the cursor to continue."
   startCursor: String
+}
+
+"A scheduled future outage window for an elevator/escalator unit."
+type PlannedEquipmentOutage {
+  "When the unit is expected back in service."
+  end: OffsetDateTime
+  "Operator-supplied cause, e.g. `Maintenance`."
+  reason: String
+  "When the planned outage begins."
+  start: OffsetDateTime!
 }
 
 "Stop position at a specific stop."
@@ -2449,10 +2469,20 @@ type StationEquipment {
   "Feed-scoped id in the format `FeedId:Code`, e.g. `mta-subway:EL359`."
   id: String!
   """
-  Whether the unit is currently in service. Always `null` until a realtime equipment status
-  source is configured; `null` means unknown, never "working".
+  Whether the unit is currently in service, from the operator's realtime outage feed. `null`
+  means unknown: no updater configured, or the feed has gone stale — never "working".
   """
   operational: Boolean
+  """
+  The current out-of-service condition, when the operator's realtime outage feed reports one.
+  `null` when the unit is in service or its status is unknown.
+  """
+  outage: EquipmentOutage
+  """
+  Scheduled future outage windows (typically overnight maintenance). Empty when none are
+  announced or status is unknown.
+  """
+  plannedOutages: [PlannedEquipmentOutage!]!
   "True when at least one pathway in the graph is served by this unit."
   routable: Boolean!
   "Operator prose describing what the unit serves, e.g. `mezzanine to Manhattan-bound platform`."

@@ -21,6 +21,7 @@ import org.opentripplanner.routing.algorithm.raptoradapter.transit.TripSchedule;
 import org.opentripplanner.routing.algorithm.raptoradapter.transit.mappers.RaptorTransitDataMapper;
 import org.opentripplanner.routing.fares.FareServiceFactory;
 import org.opentripplanner.routing.util.EllipsoidUtils;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusRepository;
 import org.opentripplanner.service.osminfo.OsmInfoGraphBuildRepository;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleRepository;
 import org.opentripplanner.service.streetdetails.StreetDetailsRepository;
@@ -210,6 +211,7 @@ public class ConstructApplication {
       graph(),
       deduplicatorService(),
       vertexLinker(),
+      equipmentStatusRepository(),
       realtimeVehicleRepository(),
       vehicleRentalRepository(),
       vehicleParkingRepository(),
@@ -302,6 +304,10 @@ public class ConstructApplication {
 
   public StreetRepository streetRepository() {
     return factory.streetRepository();
+  }
+
+  public EquipmentStatusRepository equipmentStatusRepository() {
+    return factory.equipmentStatusRepository();
   }
 
   public RealtimeVehicleRepository realtimeVehicleRepository() {

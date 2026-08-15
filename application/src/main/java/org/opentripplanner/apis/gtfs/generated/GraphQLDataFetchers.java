@@ -376,8 +376,26 @@ public class GraphQLDataFetchers {
     public DataFetcher<Boolean> ada();
     public DataFetcher<Boolean> routable();
     public DataFetcher<Boolean> operational();
+    public DataFetcher<org.opentripplanner.service.equipmentstatus.model.EquipmentOutage> outage();
+    public DataFetcher<
+      Iterable<org.opentripplanner.service.equipmentstatus.model.PlannedEquipmentOutage>
+    > plannedOutages();
     public DataFetcher<Object> stop();
     public DataFetcher<Iterable<org.opentripplanner.transit.model.site.Entrance>> entrances();
+  }
+
+  // Manually added for the NYC fork's realtime equipment status; regenerate-and-diff
+  // when the upstream codegen runs.
+  public interface GraphQLEquipmentOutage {
+    public DataFetcher<String> reason();
+    public DataFetcher<java.time.OffsetDateTime> since();
+    public DataFetcher<java.time.OffsetDateTime> estimatedReturnToService();
+  }
+
+  public interface GraphQLPlannedEquipmentOutage {
+    public DataFetcher<java.time.OffsetDateTime> start();
+    public DataFetcher<java.time.OffsetDateTime> end();
+    public DataFetcher<String> reason();
   }
 
   public interface GraphQLEntrance {

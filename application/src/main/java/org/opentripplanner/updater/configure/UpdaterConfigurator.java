@@ -16,6 +16,7 @@ import org.opentripplanner.framework.application.OTPFeature;
 import org.opentripplanner.framework.io.OtpHttpClientFactory;
 import org.opentripplanner.framework.transaction.UpdateManager;
 import org.opentripplanner.framework.transaction.api.RepositoryHandle;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusRepository;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleRepository;
 import org.opentripplanner.service.vehicleparking.VehicleParkingRepository;
 import org.opentripplanner.service.vehiclerental.VehicleRentalRepository;
@@ -29,6 +30,7 @@ import org.opentripplanner.updater.GraphUpdaterManager;
 import org.opentripplanner.updater.GraphWriterService;
 import org.opentripplanner.updater.UpdatersParameters;
 import org.opentripplanner.updater.alert.gtfs.GtfsRealtimeAlertsUpdater;
+import org.opentripplanner.updater.equipment.MtaEquipmentStatusUpdater;
 import org.opentripplanner.updater.spi.GraphUpdater;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealTimeTripUpdateAdapter;
 import org.opentripplanner.updater.trip.gtfs.updater.http.PollingTripUpdater;
@@ -58,6 +60,7 @@ public class UpdaterConfigurator {
   private final VertexLinker linker;
   private final TimetableRepository timetableRepository;
   private final UpdatersParameters updatersParameters;
+  private final EquipmentStatusRepository equipmentStatusRepository;
   private final RealtimeVehicleRepository realtimeVehicleRepository;
   private final VehicleRentalRepository vehicleRentalRepository;
 
@@ -83,6 +86,7 @@ public class UpdaterConfigurator {
     Graph graph,
     DeduplicatorService deduplicator,
     VertexLinker linker,
+    EquipmentStatusRepository equipmentStatusRepository,
     RealtimeVehicleRepository realtimeVehicleRepository,
     VehicleRentalRepository vehicleRentalRepository,
     VehicleParkingRepository parkingRepository,
@@ -96,6 +100,7 @@ public class UpdaterConfigurator {
     this.graph = graph;
     this.deduplicator = deduplicator;
     this.linker = linker;
+    this.equipmentStatusRepository = equipmentStatusRepository;
     this.realtimeVehicleRepository = realtimeVehicleRepository;
     this.vehicleRentalRepository = vehicleRentalRepository;
     this.timetableRepository = timetableRepository;
@@ -111,6 +116,7 @@ public class UpdaterConfigurator {
     Graph graph,
     DeduplicatorService deduplicator,
     VertexLinker linker,
+    EquipmentStatusRepository equipmentStatusRepository,
     RealtimeVehicleRepository realtimeVehicleRepository,
     VehicleRentalRepository vehicleRentalRepository,
     VehicleParkingRepository parkingRepository,
@@ -125,6 +131,7 @@ public class UpdaterConfigurator {
       graph,
       deduplicator,
       linker,
+      equipmentStatusRepository,
       realtimeVehicleRepository,
       vehicleRentalRepository,
       parkingRepository,
@@ -217,6 +224,9 @@ public class UpdaterConfigurator {
         );
         updaters.add(new VehicleRentalUpdater(configItem, source, linker, vehicleRentalRepository));
       }
+    }
+    for (var configItem : updatersParameters.getMtaEquipmentStatusUpdaterParameters()) {
+      updaters.add(new MtaEquipmentStatusUpdater(configItem, equipmentStatusRepository));
     }
     for (var configItem : updatersParameters.getGtfsRealtimeAlertsUpdaterParameters()) {
       updaters.add(new GtfsRealtimeAlertsUpdater(configItem, timetableRepository));

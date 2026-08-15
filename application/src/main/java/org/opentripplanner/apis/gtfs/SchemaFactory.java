@@ -28,6 +28,7 @@ import org.opentripplanner.apis.gtfs.datafetchers.DepartureRowImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.DependentFareProductImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.ElevatorUseImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.EntranceImpl;
+import org.opentripplanner.apis.gtfs.datafetchers.EquipmentOutageImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.EscalatorUseImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.EstimatedTimeImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.FareProductTypeResolver;
@@ -48,6 +49,7 @@ import org.opentripplanner.apis.gtfs.datafetchers.PlaceImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.PlaceInterfaceTypeResolver;
 import org.opentripplanner.apis.gtfs.datafetchers.PlanConnectionImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.PlanImpl;
+import org.opentripplanner.apis.gtfs.datafetchers.PlannedEquipmentOutageImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.QueryTypeImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.RealTimeEstimateImpl;
 import org.opentripplanner.apis.gtfs.datafetchers.RentalPlaceTypeResolver;
@@ -218,6 +220,8 @@ public class SchemaFactory {
         .type(typeWiring.build(EstimatedTimeImpl.class))
         .type(typeWiring.build(EntranceImpl.class))
         .type(typeWiring.build(StationEquipmentImpl.class))
+        .type(typeWiring.build(EquipmentOutageImpl.class))
+        .type(typeWiring.build(PlannedEquipmentOutageImpl.class))
         .type(typeWiring.build(RentalVehicleFuelImpl.class))
         .type(typeWiring.build(EscalatorUseImpl.class))
         .type(typeWiring.build(StairsUseImpl.class))

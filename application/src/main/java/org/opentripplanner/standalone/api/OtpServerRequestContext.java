@@ -35,6 +35,7 @@ import org.opentripplanner.routing.api.request.RouteRequest;
 import org.opentripplanner.routing.fares.FareService;
 import org.opentripplanner.routing.linking.LinkingContextFactory;
 import org.opentripplanner.routing.via.ViaCoordinateTransferFactory;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusService;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleService;
 import org.opentripplanner.service.streetdetails.StreetDetailsService;
 import org.opentripplanner.service.vehicleparking.VehicleParkingService;
@@ -120,6 +121,8 @@ public interface OtpServerRequestContext {
 
   @HttpRequestScoped
   RealtimeVehicleService realtimeVehicleService();
+
+  EquipmentStatusService equipmentStatusService();
 
   VehicleRentalService vehicleRentalService();
 

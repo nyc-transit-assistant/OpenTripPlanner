@@ -2,10 +2,14 @@ package org.opentripplanner.apis.gtfs.datafetchers;
 
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
+import java.util.List;
 import java.util.Objects;
 import org.opentripplanner.apis.gtfs.GraphQLRequestContext;
 import org.opentripplanner.apis.gtfs.generated.GraphQLDataFetchers;
 import org.opentripplanner.apis.gtfs.generated.GraphQLTypes;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusService;
+import org.opentripplanner.service.equipmentstatus.model.EquipmentOutage;
+import org.opentripplanner.service.equipmentstatus.model.PlannedEquipmentOutage;
 import org.opentripplanner.transit.model.site.Entrance;
 import org.opentripplanner.transit.model.site.StationEquipment;
 import org.opentripplanner.transit.service.TransitService;
@@ -48,8 +52,18 @@ public class StationEquipmentImpl implements GraphQLDataFetchers.GraphQLStationE
 
   @Override
   public DataFetcher<Boolean> operational() {
-    // Phase 1: no realtime equipment status source is wired; null means unknown.
-    return environment -> null;
+    return environment -> equipmentStatus(environment).operational(source(environment).code());
+  }
+
+  @Override
+  public DataFetcher<EquipmentOutage> outage() {
+    return environment -> equipmentStatus(environment).currentOutage(source(environment).code());
+  }
+
+  @Override
+  public DataFetcher<Iterable<PlannedEquipmentOutage>> plannedOutages() {
+    return environment ->
+      List.copyOf(equipmentStatus(environment).plannedOutages(source(environment).code()));
   }
 
   @Override
@@ -85,5 +99,9 @@ public class StationEquipmentImpl implements GraphQLDataFetchers.GraphQLStationE
 
   private static TransitService getTransitService(DataFetchingEnvironment environment) {
     return environment.<GraphQLRequestContext>getContext().transitService();
+  }
+
+  private static EquipmentStatusService equipmentStatus(DataFetchingEnvironment environment) {
+    return environment.<GraphQLRequestContext>getContext().equipmentStatusService();
   }
 }

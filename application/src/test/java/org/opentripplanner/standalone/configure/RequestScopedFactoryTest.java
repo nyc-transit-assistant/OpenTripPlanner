@@ -35,6 +35,7 @@ import org.opentripplanner.routing.fares.FareServiceFactory;
 import org.opentripplanner.routing.linking.LinkingContextFactory;
 import org.opentripplanner.routing.linking.VertexLinkerTestFactory;
 import org.opentripplanner.routing.via.ViaCoordinateTransferFactory;
+import org.opentripplanner.service.equipmentstatus.configure.EquipmentStatusServiceModule;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleRepository;
 import org.opentripplanner.service.realtimevehicles.internal.DefaultRealtimeVehicleRepository;
 import org.opentripplanner.service.streetdetails.StreetDetailsService;
@@ -169,7 +170,7 @@ class RequestScopedFactoryTest {
   }
 
   @Singleton
-  @Component(modules = ConstructApplicationModule.class)
+  @Component(modules = { ConstructApplicationModule.class, EquipmentStatusServiceModule.class })
   interface TestFactory {
     RequestScopedFactory.Builder requestScopedFactoryBuilder();
 

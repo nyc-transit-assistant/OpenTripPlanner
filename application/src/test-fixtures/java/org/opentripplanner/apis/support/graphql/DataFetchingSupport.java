@@ -11,6 +11,7 @@ import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.DataFetchingEnvironmentImpl;
 import java.util.Map;
 import org.opentripplanner.apis.gtfs.GraphQLRequestContext;
+import org.opentripplanner.service.equipmentstatus.internal.DefaultEquipmentStatusService;
 import org.opentripplanner.transit.service.DefaultTransitService;
 import org.opentripplanner.transit.service.TimetableRepository;
 import org.opentripplanner.transit.service.TransitService;
@@ -51,6 +52,7 @@ public class DataFetchingSupport {
           null,
           null,
           null,
+          new DefaultEquipmentStatusService(),
           null,
           null,
           null,

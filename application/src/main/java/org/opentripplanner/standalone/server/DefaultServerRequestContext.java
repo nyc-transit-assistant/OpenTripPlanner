@@ -30,6 +30,7 @@ import org.opentripplanner.routing.fares.FareService;
 import org.opentripplanner.routing.linking.LinkingContextFactory;
 import org.opentripplanner.routing.service.DefaultRoutingService;
 import org.opentripplanner.routing.via.ViaCoordinateTransferFactory;
+import org.opentripplanner.service.equipmentstatus.EquipmentStatusService;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleRepository;
 import org.opentripplanner.service.realtimevehicles.RealtimeVehicleService;
 import org.opentripplanner.service.realtimevehicles.internal.DefaultRealtimeVehicleService;
@@ -55,6 +56,7 @@ public class DefaultServerRequestContext implements OtpServerRequestContext {
   //                  All 3 sections is sorted alphabetically.
 
   private final DebugUiConfig debugUiConfig;
+  private final EquipmentStatusService equipmentStatusService;
   private final TransactionScope transactionScope;
   private final FareService fareService;
   private final FlexParameters flexParameters;
@@ -127,6 +129,7 @@ public class DefaultServerRequestContext implements OtpServerRequestContext {
   public DefaultServerRequestContext(
     // Keep the same order as in the field declaration
     DebugUiConfig debugUiConfig,
+    EquipmentStatusService equipmentStatusService,
     FareService fareService,
     FlexParameters flexParameters,
     Graph graph,
@@ -163,6 +166,7 @@ public class DefaultServerRequestContext implements OtpServerRequestContext {
     TransmodelAPIParameters transmodelAPIParameters
   ) {
     this.debugUiConfig = debugUiConfig;
+    this.equipmentStatusService = equipmentStatusService;
     this.flexParameters = flexParameters;
     this.fareService = fareService;
     this.graph = graph;
@@ -249,6 +253,11 @@ public class DefaultServerRequestContext implements OtpServerRequestContext {
   @Override
   public RealtimeVehicleService realtimeVehicleService() {
     return new DefaultRealtimeVehicleService(realtimeVehicleRepository, transitService);
+  }
+
+  @Override
+  public EquipmentStatusService equipmentStatusService() {
+    return equipmentStatusService;
   }
 
   @Override

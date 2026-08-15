@@ -33,6 +33,7 @@ import org.opentripplanner.framework.transaction.TimetableSnapshotParameters;
 import org.opentripplanner.standalone.config.framework.json.NodeAdapter;
 import org.opentripplanner.standalone.config.routerconfig.updaters.GtfsRealtimeAlertsUpdaterConfig;
 import org.opentripplanner.standalone.config.routerconfig.updaters.MqttGtfsRealtimeUpdaterConfig;
+import org.opentripplanner.standalone.config.routerconfig.updaters.MtaEquipmentStatusConfig;
 import org.opentripplanner.standalone.config.routerconfig.updaters.PollingTripUpdaterConfig;
 import org.opentripplanner.standalone.config.routerconfig.updaters.SiriETGooglePubsubUpdaterConfig;
 import org.opentripplanner.standalone.config.routerconfig.updaters.SiriETLiteUpdaterConfig;
@@ -50,6 +51,7 @@ import org.opentripplanner.updater.UpdatersParameters;
 import org.opentripplanner.updater.alert.gtfs.GtfsRealtimeAlertsUpdaterParameters;
 import org.opentripplanner.updater.alert.siri.SiriSXUpdaterParameters;
 import org.opentripplanner.updater.alert.siri.lite.SiriSXLiteUpdaterParameters;
+import org.opentripplanner.updater.equipment.MtaEquipmentStatusUpdaterParameters;
 import org.opentripplanner.updater.trip.gtfs.updater.http.PollingTripUpdaterParameters;
 import org.opentripplanner.updater.trip.gtfs.updater.mqtt.MqttGtfsRealtimeUpdaterParameters;
 import org.opentripplanner.updater.trip.siri.updater.DefaultSiriETUpdaterParameters;
@@ -166,6 +168,11 @@ public class UpdatersConfig implements UpdatersParameters {
   }
 
   @Override
+  public List<MtaEquipmentStatusUpdaterParameters> getMtaEquipmentStatusUpdaterParameters() {
+    return getParameters(Type.MTA_EQUIPMENT_STATUS);
+  }
+
+  @Override
   public List<PollingTripUpdaterParameters> getPollingStoptimeUpdaterParameters() {
     return getParameters(STOP_TIME_UPDATER);
   }
@@ -242,6 +249,7 @@ public class UpdatersConfig implements UpdatersParameters {
     BIKE_RENTAL(VehicleRentalUpdaterConfig::create),
     VEHICLE_RENTAL(VehicleRentalUpdaterConfig::create),
     STOP_TIME_UPDATER(PollingTripUpdaterConfig::create),
+    MTA_EQUIPMENT_STATUS(MtaEquipmentStatusConfig::create),
     MQTT_GTFS_RT_UPDATER(MqttGtfsRealtimeUpdaterConfig::create),
     REAL_TIME_ALERTS(GtfsRealtimeAlertsUpdaterConfig::create),
     VEHICLE_POSITIONS(VehiclePositionsUpdaterConfig::create),
