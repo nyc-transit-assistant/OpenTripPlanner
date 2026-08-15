@@ -4,6 +4,7 @@ import static org.opentripplanner.routing.api.request.preference.AccessibilityPr
 
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import org.opentripplanner.utils.lang.Units;
 import org.opentripplanner.utils.tostring.ToStringBuilder;
@@ -52,6 +53,14 @@ public class WheelchairPreferences implements Serializable {
   private AccessibilityPreferences trip;
   private AccessibilityPreferences stop;
   private AccessibilityPreferences elevator;
+
+  /**
+   * Operator unit codes of elevators currently out of service, injected per-request from the
+   * realtime equipment status feed (never from user input or config). Not a rider preference in
+   * the config sense — it rides here so it reaches street search and the transfer-cache key
+   * through the wheelchair plumbing without new request surface.
+   */
+  private Set<String> inoperativeEquipment = Set.of();
   private double inaccessibleStreetReluctance;
   private double maxSlope;
   private double slopeExceededReluctance;
@@ -76,6 +85,7 @@ public class WheelchairPreferences implements Serializable {
   }
 
   private WheelchairPreferences(Builder builder) {
+    this.inoperativeEquipment = Set.copyOf(builder.inoperativeEquipment);
     this.trip = builder.trip;
     this.stop = builder.stop;
     this.elevator = builder.elevator;
@@ -103,6 +113,10 @@ public class WheelchairPreferences implements Serializable {
 
   public AccessibilityPreferences elevator() {
     return elevator;
+  }
+
+  public Set<String> inoperativeEquipment() {
+    return inoperativeEquipment;
   }
 
   public double inaccessibleStreetReluctance() {
@@ -137,7 +151,8 @@ public class WheelchairPreferences implements Serializable {
       Double.compare(that.stairsReluctance, stairsReluctance) == 0 &&
       trip.equals(that.trip) &&
       stop.equals(that.stop) &&
-      elevator.equals(that.elevator)
+      elevator.equals(that.elevator) &&
+      inoperativeEquipment.equals(that.inoperativeEquipment)
     );
   }
 
@@ -150,7 +165,8 @@ public class WheelchairPreferences implements Serializable {
       inaccessibleStreetReluctance,
       maxSlope,
       slopeExceededReluctance,
-      stairsReluctance
+      stairsReluctance,
+      inoperativeEquipment
     );
   }
 
@@ -168,6 +184,7 @@ public class WheelchairPreferences implements Serializable {
       .addNum("maxSlope", maxSlope, DEFAULT.maxSlope)
       .addNum("slopeExceededReluctance", slopeExceededReluctance, DEFAULT.slopeExceededReluctance)
       .addNum("stairsReluctance", stairsReluctance, DEFAULT.stairsReluctance)
+      .addCol("inoperativeEquipment", inoperativeEquipment, DEFAULT.inoperativeEquipment)
       .toString();
   }
 
@@ -181,6 +198,7 @@ public class WheelchairPreferences implements Serializable {
     private double maxSlope;
     private double slopeExceededReluctance;
     private double stairsReluctance;
+    private Set<String> inoperativeEquipment;
 
     private Builder(WheelchairPreferences original) {
       this.original = original;
@@ -191,6 +209,7 @@ public class WheelchairPreferences implements Serializable {
       this.maxSlope = original.maxSlope;
       this.slopeExceededReluctance = original.slopeExceededReluctance;
       this.stairsReluctance = original.stairsReluctance;
+      this.inoperativeEquipment = original.inoperativeEquipment;
     }
 
     public WheelchairPreferences original() {
@@ -199,6 +218,11 @@ public class WheelchairPreferences implements Serializable {
 
     public Builder withTrip(AccessibilityPreferences trip) {
       this.trip = trip;
+      return this;
+    }
+
+    public Builder withInoperativeEquipment(Set<String> inoperativeEquipment) {
+      this.inoperativeEquipment = inoperativeEquipment;
       return this;
     }
 

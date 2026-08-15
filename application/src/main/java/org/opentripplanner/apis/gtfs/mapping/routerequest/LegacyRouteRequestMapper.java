@@ -240,6 +240,16 @@ public class LegacyRouteRequestMapper {
       });
     });
 
+    // Realtime elevator outages: carried on wheelchair preferences so blocking reaches every
+    // street search and the transfer-cache key. Only consulted when wheelchair is enabled;
+    // empty when status is unknown (stale feed), which correctly disables blocking.
+    var inoperativeEquipment = context.equipmentStatusService().inoperativeEquipmentCodes();
+    if (!inoperativeEquipment.isEmpty()) {
+      request.withPreferences(p ->
+        p.withWheelchair(w -> w.withInoperativeEquipment(inoperativeEquipment))
+      );
+    }
+
     return request.buildRequest();
   }
 

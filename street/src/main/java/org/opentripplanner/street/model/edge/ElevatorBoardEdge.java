@@ -1,5 +1,7 @@
 package org.opentripplanner.street.model.edge;
 
+import java.util.regex.Pattern;
+import javax.annotation.Nullable;
 import org.locationtech.jts.geom.LineString;
 import org.opentripplanner.core.model.i18n.I18NString;
 import org.opentripplanner.core.model.i18n.NonLocalizedString;
@@ -24,10 +26,36 @@ public class ElevatorBoardEdge extends Edge implements BikeWalkableEdge, Elevato
 
   private final I18NString customName;
 
+  /** Matches operator unit codes signposted on station elevator pathways, e.g. {@code EL359}. */
+  private static final Pattern EQUIPMENT_CODE = Pattern.compile("^(EL|ES)\\d+X?$");
+
+  /**
+   * The operator's unit code when this edge was built from a signposted station elevator
+   * pathway; null for OSM elevators and unsignposted pathways. The join key into the realtime
+   * equipment status feed.
+   */
+  @Nullable
+  private final String equipmentCode;
+
   private ElevatorBoardEdge(Vertex from, ElevatorHopVertex to, I18NString customName) {
     super(from, to);
     this.customName = customName;
+    this.equipmentCode = parseEquipmentCode(customName);
     geometry = GeometryUtils.makeLineString(from.getX(), from.getY(), to.getX(), to.getY());
+  }
+
+  @Nullable
+  private static String parseEquipmentCode(@Nullable I18NString name) {
+    if (name == null) {
+      return null;
+    }
+    var text = name.toString().trim();
+    return EQUIPMENT_CODE.matcher(text).matches() ? text : null;
+  }
+
+  @Nullable
+  public String equipmentCode() {
+    return equipmentCode;
   }
 
   public static ElevatorBoardEdge createElevatorBoardEdge(Vertex from, ElevatorHopVertex to) {
@@ -50,6 +78,18 @@ public class ElevatorBoardEdge extends Edge implements BikeWalkableEdge, Elevato
     }
 
     var req = s0.getRequest();
+
+    // A unit the realtime feed reports out of service is untraversable for wheelchair
+    // searches — a rider who cannot use stairs must not be routed into a dead elevator. The
+    // set is empty for non-wheelchair searches and when status is unknown (stale feed), so
+    // this never blocks on missing data.
+    if (
+      equipmentCode != null &&
+      req.wheelchairEnabled() &&
+      req.wheelchair().inoperativeEquipment().contains(equipmentCode)
+    ) {
+      return State.empty();
+    }
 
     long time = req.elevator().boardSlack().toSeconds();
     s1.incrementWeight(req.elevator().boardCost() + req.elevator().reluctance() * time);

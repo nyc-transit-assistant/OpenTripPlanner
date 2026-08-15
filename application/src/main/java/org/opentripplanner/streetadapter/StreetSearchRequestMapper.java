@@ -109,7 +109,8 @@ public class StreetSearchRequestMapper {
       .withMaxSlope(wheelchair.maxSlope())
       .withSlopeExceededReluctance(wheelchair.slopeExceededReluctance())
       .withStairsReluctance(wheelchair.stairsReluctance())
-      .withInaccessibleStreetReluctance(wheelchair.inaccessibleStreetReluctance());
+      .withInaccessibleStreetReluctance(wheelchair.inaccessibleStreetReluctance())
+      .withInoperativeEquipment(wheelchair.inoperativeEquipment());
   }
 
   private static AccessibilityRequest mapAccessibility(AccessibilityPreferences stop) {

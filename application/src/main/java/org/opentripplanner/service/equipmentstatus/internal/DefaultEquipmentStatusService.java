@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 import org.opentripplanner.service.equipmentstatus.EquipmentStatusRepository;
 import org.opentripplanner.service.equipmentstatus.EquipmentStatusService;
@@ -78,6 +79,12 @@ public class DefaultEquipmentStatusService
       return List.of();
     }
     return current.plannedOutages().getOrDefault(equipmentCode, List.of());
+  }
+
+  @Override
+  public Set<String> inoperativeEquipmentCodes() {
+    var current = freshSnapshot();
+    return current == null ? Set.of() : current.currentOutages().keySet();
   }
 
   @Nullable

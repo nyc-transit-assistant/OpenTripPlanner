@@ -1,6 +1,7 @@
 package org.opentripplanner.service.equipmentstatus;
 
 import java.util.List;
+import java.util.Set;
 import javax.annotation.Nullable;
 import org.opentripplanner.service.equipmentstatus.model.EquipmentOutage;
 import org.opentripplanner.service.equipmentstatus.model.PlannedEquipmentOutage;
@@ -25,4 +26,11 @@ public interface EquipmentStatusService {
 
   /** Scheduled future outage windows for the unit; empty when none (or status is unknown). */
   List<PlannedEquipmentOutage> plannedOutages(String equipmentCode);
+
+  /**
+   * Codes of every unit currently out of service. Empty when status is unknown (no updater,
+   * stale feed) — so consumers that BLOCK on membership degrade to "no blocking", never to
+   * blocking on frozen data.
+   */
+  Set<String> inoperativeEquipmentCodes();
 }

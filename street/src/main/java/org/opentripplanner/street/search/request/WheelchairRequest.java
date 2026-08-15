@@ -3,6 +3,7 @@ package org.opentripplanner.street.search.request;
 import static org.opentripplanner.street.search.request.AccessibilityRequest.ofCost;
 
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import org.opentripplanner.utils.lang.Units;
 import org.opentripplanner.utils.tostring.ToStringBuilder;
@@ -44,11 +45,20 @@ public class WheelchairRequest {
     DEFAULT_INACCESSIBLE_STREET_RELUCTANCE,
     DEFAULT_MAX_SLOPE,
     DEFAULT_SLOPE_EXCEEDED_RELUCTANCE,
-    DEFAULT_STAIRS_RELUCTANCE
+    DEFAULT_STAIRS_RELUCTANCE,
+    Set.of()
   );
 
   private final AccessibilityRequest stop;
   private final AccessibilityRequest elevator;
+
+  /**
+   * Operator unit codes (e.g. {@code EL359}) of elevators currently out of service, injected
+   * per-request from the realtime equipment status feed. Elevator board edges carrying one of
+   * these codes are untraversable for this request. Rides on the wheelchair request so that
+   * it only affects wheelchair searches and participates in the transfer-cache key.
+   */
+  private final Set<String> inoperativeEquipment;
   private final double inaccessibleStreetReluctance;
   private final double maxSlope;
   private final double slopeExceededReluctance;
@@ -60,8 +70,10 @@ public class WheelchairRequest {
     double inaccessibleStreetReluctance,
     double maxSlope,
     double slopeExceededReluctance,
-    double stairsReluctance
+    double stairsReluctance,
+    Set<String> inoperativeEquipment
   ) {
+    this.inoperativeEquipment = Set.copyOf(inoperativeEquipment);
     this.stop = Objects.requireNonNull(stop);
     this.elevator = Objects.requireNonNull(elevator);
     this.inaccessibleStreetReluctance = Units.reluctance(inaccessibleStreetReluctance);
@@ -77,6 +89,7 @@ public class WheelchairRequest {
     this.maxSlope = Units.ratio(builder.maxSlope);
     this.slopeExceededReluctance = Units.reluctance(builder.slopeExceededReluctance);
     this.stairsReluctance = Units.reluctance(builder.stairsReluctance);
+    this.inoperativeEquipment = Set.copyOf(builder.inoperativeEquipment);
   }
 
   public static Builder of() {
@@ -111,6 +124,10 @@ public class WheelchairRequest {
     return stairsReluctance;
   }
 
+  public Set<String> inoperativeEquipment() {
+    return inoperativeEquipment;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -126,7 +143,8 @@ public class WheelchairRequest {
       Double.compare(that.slopeExceededReluctance, slopeExceededReluctance) == 0 &&
       Double.compare(that.stairsReluctance, stairsReluctance) == 0 &&
       stop.equals(that.stop) &&
-      elevator.equals(that.elevator)
+      elevator.equals(that.elevator) &&
+      inoperativeEquipment.equals(that.inoperativeEquipment)
     );
   }
 
@@ -138,7 +156,8 @@ public class WheelchairRequest {
       inaccessibleStreetReluctance,
       maxSlope,
       slopeExceededReluctance,
-      stairsReluctance
+      stairsReluctance,
+      inoperativeEquipment
     );
   }
 
@@ -155,6 +174,7 @@ public class WheelchairRequest {
       .addNum("maxSlope", maxSlope, DEFAULT.maxSlope)
       .addNum("slopeExceededReluctance", slopeExceededReluctance, DEFAULT.slopeExceededReluctance)
       .addNum("stairsReluctance", stairsReluctance, DEFAULT.stairsReluctance)
+      .addCol("inoperativeEquipment", inoperativeEquipment, DEFAULT.inoperativeEquipment)
       .toString();
   }
 
@@ -167,6 +187,7 @@ public class WheelchairRequest {
     private double maxSlope;
     private double slopeExceededReluctance;
     private double stairsReluctance;
+    private Set<String> inoperativeEquipment;
 
     private Builder(WheelchairRequest original) {
       this.original = original;
@@ -176,6 +197,7 @@ public class WheelchairRequest {
       this.maxSlope = original.maxSlope;
       this.slopeExceededReluctance = original.slopeExceededReluctance;
       this.stairsReluctance = original.stairsReluctance;
+      this.inoperativeEquipment = original.inoperativeEquipment;
     }
 
     public WheelchairRequest original() {
@@ -208,6 +230,11 @@ public class WheelchairRequest {
 
     public Builder withElevator(AccessibilityRequest elevator) {
       this.elevator = elevator;
+      return this;
+    }
+
+    public Builder withInoperativeEquipment(Set<String> inoperativeEquipment) {
+      this.inoperativeEquipment = inoperativeEquipment;
       return this;
     }
 
