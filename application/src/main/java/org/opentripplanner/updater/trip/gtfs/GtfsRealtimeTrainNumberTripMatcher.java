@@ -220,6 +220,14 @@ public class GtfsRealtimeTrainNumberTripMatcher {
         if (trip.hasStartDate() && !candidateDate.equals(serviceDate)) {
           builder.setStartDate(ServiceDateUtils.asCompactString(candidateDate));
         }
+        if (trip.getScheduleRelationship() == ScheduleRelationship.ADDED) {
+          // A train number that resolves to a static trip active on the date IS that
+          // scheduled trip, mislabeled (NJT flags late-night next-service-day departures
+          // ADDED). Applying it as ADDED would either duplicate the scheduled train
+          // (TRIP_ALREADY_EXISTS) or synthesize a phantom alongside it. CANCELED and other
+          // relationships are deliberately left untouched.
+          builder.setScheduleRelationship(ScheduleRelationship.SCHEDULED);
+        }
         return builder.build();
       }
     }

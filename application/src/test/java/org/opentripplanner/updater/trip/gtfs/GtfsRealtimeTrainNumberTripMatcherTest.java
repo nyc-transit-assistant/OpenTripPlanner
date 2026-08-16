@@ -210,6 +210,19 @@ public class GtfsRealtimeTrainNumberTripMatcherTest {
       .build();
     var matched = matcher.match(FEED_ID, TRAIN_NUMBER, trip);
     assertEquals(STATIC_TRIP_ID, matched.getTripId());
+    // Rescheduled, not applied as ADDED: an ADDED label on a resolvable train is a mislabel,
+    // and applying it as ADDED collides with the scheduled trip (TRIP_ALREADY_EXISTS).
+    assertEquals(TripDescriptor.ScheduleRelationship.SCHEDULED, matched.getScheduleRelationship());
+  }
+
+  @Test
+  void canceledDescriptorKeepsItsRelationshipOnMatch() {
+    var trip = descriptor()
+      .setScheduleRelationship(TripDescriptor.ScheduleRelationship.CANCELED)
+      .build();
+    var matched = matcher().match(FEED_ID, TRAIN_NUMBER, trip);
+    assertEquals(STATIC_TRIP_ID, matched.getTripId());
+    assertEquals(TripDescriptor.ScheduleRelationship.CANCELED, matched.getScheduleRelationship());
   }
 
   @Test
