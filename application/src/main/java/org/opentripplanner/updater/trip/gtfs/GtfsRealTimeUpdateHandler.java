@@ -11,10 +11,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -25,7 +23,6 @@ import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transit.model.framework.DataValidationException;
 import org.opentripplanner.transit.model.timetable.RealTimeTripUpdate;
 import org.opentripplanner.transit.model.timetable.Trip;
-import org.opentripplanner.transit.model.timetable.TripIdAndServiceDate;
 import org.opentripplanner.transit.repository.MutableTimetableSnapshot;
 import org.opentripplanner.transit.service.TransitEditorService;
 import org.opentripplanner.updater.spi.DataValidationExceptionMapper;
@@ -161,16 +158,6 @@ public class GtfsRealTimeUpdateHandler {
     // active replacement period covers. Populated at the point of decision rather than subtracted
     // afterwards, so an aliased label is not reported as uncovered when its static route is.
     Set<String> unresolvedUncoveredRouteIds = new HashSet<>();
-
-    // Snapshot realtime-added trip state before any clear: producers such as NYCT drop a
-    // stop's update once the vehicle departs it, so a NEW trip rebuilt from the current
-    // message alone erodes from the front every cycle. The pre-clear buffer is the last
-    // cycle's state — harvest it so NewTripHandler can carry the departed stops forward
-    // with their last observed times. Lifecycle is free: when the trip leaves the feed
-    // entirely, the clear drops it and nothing is harvested next cycle.
-    Map<TripIdAndServiceDate, List<PastStop>> pastStopsByTrip = updateIncrementality == FULL_DATASET
-      ? harvestRealTimeTripStops(feedIds, updates, partialTripIdMatcher)
-      : Map.of();
 
     if (updateIncrementality == FULL_DATASET) {
       if (scopedFullDatasetClear) {
@@ -409,8 +396,7 @@ public class GtfsRealTimeUpdateHandler {
           tripUpdate,
           updateIncrementality,
           backwardsDelayPropagationType,
-          forwardsDelayPropagationType,
-          pastStopsByTrip.get(new TripIdAndServiceDate(tripUpdate.tripId(), tripUpdate.startDate()))
+          forwardsDelayPropagationType
         );
         successes.add(result);
       } catch (DataValidationException e) {
@@ -462,13 +448,12 @@ public class GtfsRealTimeUpdateHandler {
       !tripReplacementPeriods.isEmpty()
     ) {
       LOG.info(
-        "[feedIds={}] partial trip-id matches: {}, cancel-by-omission: {}, converted-to-added (unresolved/path-diverged): {}/{}, carriedForwardStops(total): {} (periods: total={}, active-routes={}, expired={})",
+        "[feedIds={}] partial trip-id matches: {}, cancel-by-omission: {}, converted-to-added (unresolved/path-diverged): {}/{} (periods: total={}, active-routes={}, expired={})",
         feedIds,
         partialTripIdMatches,
         cancelledByOmission,
         convertedScheduledToAdded,
         convertedScheduledToAddedDueToPatternDivergence,
-        addedTripHandler.carriedForwardStopsTotal,
         tripReplacementPeriods.size(),
         coveredRouteIds,
         expiredPeriods
@@ -652,159 +637,11 @@ public class GtfsRealTimeUpdateHandler {
     return feedIds.getFirst();
   }
 
-  /**
-   * Capture every realtime-added trip's stops with their last observed times, keyed by trip and
-   * service date. Must run against the buffer <em>before</em> the FULL_DATASET clear — the
-   * pre-clear buffer is the previous cycle's state and the only place a NEW trip's already
-   * departed stops still exist.
-   */
-  private Map<TripIdAndServiceDate, List<PastStop>> harvestRealTimeTripStops(
-    List<String> feedIds,
-    List<GtfsRealtime.TripUpdate> updates,
-    @Nullable GtfsRealtimePartialTripIdMatcher partialTripIdMatcher
-  ) {
-    Map<TripIdAndServiceDate, List<PastStop>> out = new HashMap<>();
-    // Realtime-added (NEW/ADDED) trips are enumerable directly.
-    for (var tripOnServiceDate : buffer.listRealTimeAddedTripOnServiceDate()) {
-      Trip trip = tripOnServiceDate.getTrip();
-      if (!feedIds.contains(trip.getId().getFeedId())) {
-        continue;
-      }
-      var pattern = buffer.getRealTimeAddedPatternForTrip(trip);
-      harvestTrip(out, trip.getId(), tripOnServiceDate.getServiceDate(), pattern);
-    }
-    // REPLACEMENT trips (including scheduled trips this handler rewrites to REPLACEMENT on
-    // stop-pattern divergence) register as modified-trip patterns, which have no enumeration
-    // API — probe the trips of the incoming batch instead.
-    for (var update : updates) {
-      if (!update.hasTrip() || !update.getTrip().hasTripId()) {
-        continue;
-      }
-      var descriptor = update.getTrip();
-      if (descriptor.getTripId().isBlank()) {
-        // Invalid updates are rejected downstream, one update at a time.
-        continue;
-      }
-      LocalDate serviceDate;
-      try {
-        serviceDate = descriptor.hasStartDate()
-          ? LocalDate.parse(
-              descriptor.getStartDate(),
-              java.time.format.DateTimeFormatter.BASIC_ISO_DATE
-            )
-          : localDateNow.get();
-      } catch (java.time.format.DateTimeParseException e) {
-        continue;
-      }
-      for (String feedId : feedIds) {
-        // The modified-trip registry is keyed by the RESOLVED (static) trip id, but the raw
-        // batch carries the producer's suffix ids (NYCT) — resolve the same way the main
-        // loop will, without disturbing the matcher's diagnostic counters.
-        var resolvedId = descriptor.getTripId();
-        if (partialTripIdMatcher != null) {
-          resolvedId = partialTripIdMatcher.matchQuietly(feedId, descriptor).getTripId();
-        }
-        var candidateIds = resolvedId.equals(descriptor.getTripId())
-          ? List.of(descriptor.getTripId())
-          : List.of(descriptor.getTripId(), resolvedId);
-        // Start-date re-anchoring rewrites the claimed date before apply, so the previous
-        // cycle's state lives under the REWRITTEN date, not the raw claimed one. Probe the
-        // claimed date's neighbours too: the date that holds realtime state is by
-        // construction the date the re-anchored apply will look up. First hit wins.
-        var candidateDates = List.of(
-          serviceDate,
-          serviceDate.plusDays(1),
-          serviceDate.minusDays(1)
-        );
-        for (var idValue : candidateIds) {
-          var tripId = new FeedScopedId(feedId, idValue);
-          for (var candidateDate : candidateDates) {
-            var key = new TripIdAndServiceDate(tripId, candidateDate);
-            if (out.containsKey(key)) {
-              break;
-            }
-            var probedPattern = buffer.getNewTripPatternForModifiedTrip(tripId, candidateDate);
-            if (probedPattern == null) {
-              probedPattern = realTimeTouchedScheduledPattern(tripId, candidateDate);
-            }
-            if (probedPattern != null) {
-              harvestTrip(out, tripId, candidateDate, probedPattern);
-              break;
-            }
-          }
-        }
-      }
-    }
-    return out;
-  }
-
-  /**
-   * A matched trip is only registered in the modified-trip pattern map once its realtime stop
-   * pattern actually differs from the scheduled one. Before the origin departs, the feed still
-   * lists every stop, so a matched trip's realtime state — plain delay updates, or a
-   * REPLACEMENT rebuild whose only divergence is an unknown stop (NYCT phantom stops absent
-   * from static GTFS) — rides the <em>scheduled</em> pattern's timetable. At the origin
-   * departure the origin drops from the feed, the pattern finally diverges, and the
-   * modified-trip probe above finds nothing from the previous cycle: without this fallback the
-   * origin stop is silently lost at exactly that transition (the Whitehall St case). Only
-   * realtime-touched trip times are harvested — scheduled times are predictions nobody
-   * observed, and carrying them would fabricate history the feed never reported.
-   */
-  @Nullable
-  private org.opentripplanner.transit.model.network.TripPattern realTimeTouchedScheduledPattern(
-    FeedScopedId tripId,
-    LocalDate serviceDate
-  ) {
-    var trip = transitEditorService.getTrip(tripId);
-    if (trip == null) {
-      return null;
-    }
-    var pattern = transitEditorService.findPattern(trip);
-    if (pattern == null) {
-      return null;
-    }
-    var tripTimes = buffer.resolve(pattern, serviceDate).getTripTimes(tripId);
-    if (tripTimes == null || !tripTimes.hasAnyUpdates() || tripTimes.isCanceledOrDeleted()) {
-      return null;
-    }
-    return pattern;
-  }
-
-  private void harvestTrip(
-    Map<TripIdAndServiceDate, List<PastStop>> out,
-    FeedScopedId tripId,
-    LocalDate serviceDate,
-    @Nullable org.opentripplanner.transit.model.network.TripPattern pattern
-  ) {
-    if (pattern == null) {
-      return;
-    }
-    var timetable = buffer.resolve(pattern, serviceDate);
-    var tripTimes = timetable.getTripTimes(tripId);
-    if (tripTimes == null) {
-      return;
-    }
-    long midnight = ServiceDateUtils.asStartOfService(serviceDate, timeZone).toEpochSecond();
-    int n = pattern.numberOfStops();
-    List<PastStop> stops = new ArrayList<>(n);
-    for (int i = 0; i < n; i++) {
-      stops.add(
-        new PastStop(
-          pattern.getStop(i),
-          midnight + tripTimes.getArrivalTime(i),
-          midnight + tripTimes.getDepartureTime(i)
-        )
-      );
-    }
-    out.put(new TripIdAndServiceDate(tripId, serviceDate), stops);
-  }
-
   private UpdateSuccess applyUpdate(
     TripUpdate tripUpdate,
     UpdateIncrementality updateIncrementality,
     BackwardsDelayPropagationType backwardsDelayPropagationType,
-    ForwardsDelayPropagationType forwardsDelayPropagationType,
-    @Nullable List<PastStop> pastStops
+    ForwardsDelayPropagationType forwardsDelayPropagationType
   ) throws UpdateException {
     // The GTFS-RT TripDescriptor.schedule_relationship field is a protobuf optional enum,
     // so a single TripUpdate message carries exactly one value — it is structurally impossible
@@ -818,11 +655,11 @@ public class GtfsRealTimeUpdateHandler {
         forwardsDelayPropagationType,
         backwardsDelayPropagationType
       );
-      case NEW, ADDED -> addedTripHandler.handleNew(tripUpdate, pastStops);
+      case NEW, ADDED -> addedTripHandler.handleNew(tripUpdate);
       case CANCELED -> canceledTripHandler.cancel(tripUpdate, updateIncrementality);
       case DELETED -> canceledTripHandler.delete(tripUpdate, updateIncrementality);
       case DUPLICATED -> duplicatedTripHandler.handleDuplicated(tripUpdate, updateIncrementality);
-      case REPLACEMENT -> addedTripHandler.handleReplacement(tripUpdate, pastStops);
+      case REPLACEMENT -> addedTripHandler.handleReplacement(tripUpdate);
       case UNSCHEDULED -> throw UpdateException.of(
         tripUpdate.tripId(),
         NOT_IMPLEMENTED_UNSCHEDULED
