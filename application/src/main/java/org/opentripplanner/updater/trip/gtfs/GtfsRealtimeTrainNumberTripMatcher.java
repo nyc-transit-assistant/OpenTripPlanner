@@ -117,8 +117,13 @@ public class GtfsRealtimeTrainNumberTripMatcher {
   public TripDescriptor match(String feedId, String trainNumber, TripDescriptor trip) {
     callCount++;
     if (
-      trip.hasTripId() && transitService.containsTrip(new FeedScopedId(feedId, trip.getTripId()))
+      trip.hasTripId() &&
+      !trip.getTripId().isBlank() &&
+      transitService.containsTrip(new FeedScopedId(feedId, trip.getTripId()))
     ) {
+      // NJT rail's unscheduled ADDED entities carry a blank-but-present trip_id (proto2
+      // presence); FeedScopedId throws on blank, which would kill the whole batch — those
+      // entities must flow through to resolution/synthesis instead.
       alreadyResolvedCount++;
       return trip;
     }

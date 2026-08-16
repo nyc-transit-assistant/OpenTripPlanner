@@ -213,6 +213,24 @@ public class GtfsRealtimeTrainNumberTripMatcherTest {
   }
 
   @Test
+  void blankButPresentTripIdDoesNotThrowAndSynthesizes() {
+    // NJT rail ADDED entities carry trip_id set to EMPTY STRING (proto2 presence). The
+    // already-resolved check must not construct a FeedScopedId from it — that throws and
+    // kills the whole batch (production incident 2026-08-16).
+    var matcher = new GtfsRealtimeTrainNumberTripMatcher(
+      env.transitService(),
+      new GtfsRealtimeTrainNumberTripMatcher.SynthesisConfig("NJT-", "17")
+    );
+    var trip = TripDescriptor.newBuilder()
+      .setTripId("")
+      .setScheduleRelationship(TripDescriptor.ScheduleRelationship.ADDED)
+      .setStartDate(GTFS_SERVICE_DATE)
+      .build();
+    var matched = matcher.match(FEED_ID, "4501", trip);
+    assertEquals("NJT-4501-" + GTFS_SERVICE_DATE, matched.getTripId());
+  }
+
+  @Test
   void blankTrainNumberLeavesDescriptorUntouched() {
     var matched = matcher().match(FEED_ID, "  ", descriptor().build());
     assertEquals(INTERNAL_RT_TRIP_ID, matched.getTripId());
