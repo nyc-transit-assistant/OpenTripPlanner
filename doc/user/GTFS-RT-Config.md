@@ -105,6 +105,9 @@ HTTP request and polled regularly.
 | fuzzyTripMatching                                                     |    `boolean`    | If the trips should be matched fuzzily.                                               | *Optional* | `false`              |  1.5  |
 | [partialTripIdMatching](#u__5__partialTripIdMatching)                 |    `boolean`    | Resolve realtime trip ids that are a suffix of the static GTFS trip id.               | *Optional* | `false`              |  2.9  |
 | [scopedFullDatasetClear](#u__5__scopedFullDatasetClear)               |    `boolean`    | Never clear the whole feed on FULL_DATASET updates; clear only this updater's routes. | *Optional* | `false`              |  2.9  |
+| [trainNumberMatching](#u__5__trainNumberMatching)                     |    `boolean`    | Resolve realtime trips by train number instead of trip id.                            | *Optional* | `false`              |  2.9  |
+| [trainNumberSynthesisIdPrefix](#u__5__trainNumberSynthesisIdPrefix)   |     `string`    | Synthesize unresolved ADDED/id-less trains as `<prefix><train>-<date>`.               | *Optional* |                      |  2.9  |
+| trainNumberSynthesisRouteId                                           |     `string`    | Route id assigned to synthesized trains whose descriptor carries none.                | *Optional* |                      |  2.9  |
 | [url](#u__5__url)                                                     |     `string`    | The URL of the GTFS-RT resource.                                                      | *Required* |                      |  1.5  |
 | [feedIds](#u__5__feedIds)                                             |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.                     | *Optional* |                      |  2.9  |
 | [headers](#u__5__headers)                                             | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.            | *Optional* |                      |  2.3  |
@@ -193,6 +196,24 @@ Some agencies (notably MTA New York City Subway) emit a realtime `trip_id` that 
 Never clear the whole feed on FULL_DATASET updates; clear only this updater's routes.
 
 Set this on every updater when several realtime updaters share one static feed id (e.g. NYCT's per-line GTFS-RT URLs all writing to one subway feed). Each FULL_DATASET update then clears only the routes this updater is authoritative for — its declared trip replacement periods plus the routes present in the batch — instead of wiping data the sibling updaters just applied.
+
+<h4 id="u__5__trainNumberMatching">trainNumberMatching</h4>
+
+**Since version:** `2.9` ∙ **Type:** `boolean` ∙ **Cardinality:** `Optional` ∙ **Default value:** `false`   
+**Path:** /updaters/[5] 
+
+Resolve realtime trips by train number instead of trip id.
+
+Some agencies (notably MTA Metro-North) emit realtime trip ids that appear nowhere in the static GTFS; the FeedEntity id (trip updates) and vehicle label (vehicle positions) carry the train number, which matches the static `trip_short_name`. When enabled, the train number and start date are resolved against the static schedule and the trip id is rewritten before exact lookup.
+
+<h4 id="u__5__trainNumberSynthesisIdPrefix">trainNumberSynthesisIdPrefix</h4>
+
+**Since version:** `2.9` ∙ **Type:** `string` ∙ **Cardinality:** `Optional`   
+**Path:** /updaters/[5] 
+
+Synthesize unresolved ADDED/id-less trains as `<prefix><train>-<date>`.
+
+Only with `trainNumberMatching`. When a train number resolves to no static trip and the entity is ADDED or has no trip id (NJT rail's unscheduled event shuttles), give it this deterministic id so it is built as an added trip and keeps one identity across polling cycles. Unset disables synthesis.
 
 <h4 id="u__5__url">url</h4>
 
@@ -387,16 +408,19 @@ in a single HTTP request and polled regularly.
 <!-- vehicle-positions BEGIN -->
 <!-- NOTE! This section is auto-generated. Do not change, change doc in code instead. -->
 
-| Config Parameter            |       Type      | Summary                                                                       |  Req./Opt. | Default Value | Since |
-|-----------------------------|:---------------:|-------------------------------------------------------------------------------|:----------:|---------------|:-----:|
-| type = "vehicle-positions"  |      `enum`     | The type of the updater.                                                      | *Required* |               |  1.5  |
-| [feedId](#u__7__feedId)     |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to. | *Optional* |               |  2.2  |
-| frequency                   |    `duration`   | How often the positions should be updated.                                    | *Optional* | `"PT1M"`      |  2.2  |
-| fuzzyTripMatching           |    `boolean`    | Whether to match trips fuzzily.                                               | *Optional* | `false`       |  2.5  |
-| url                         |      `uri`      | The URL of GTFS-RT protobuf HTTP resource to download the positions from.     | *Required* |               |  2.2  |
-| [features](#u__7__features) |    `enum set`   | Which features of GTFS RT vehicle positions should be loaded into OTP.        | *Optional* |               |  2.5  |
-| [feedIds](#u__7__feedIds)   |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.             | *Optional* |               |  2.9  |
-| [headers](#u__7__headers)   | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.    | *Optional* |               |  2.3  |
+| Config Parameter             |       Type      | Summary                                                                       |  Req./Opt. | Default Value | Since |
+|------------------------------|:---------------:|-------------------------------------------------------------------------------|:----------:|---------------|:-----:|
+| type = "vehicle-positions"   |      `enum`     | The type of the updater.                                                      | *Required* |               |  1.5  |
+| [feedId](#u__7__feedId)      |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to. | *Optional* |               |  2.2  |
+| frequency                    |    `duration`   | How often the positions should be updated.                                    | *Optional* | `"PT1M"`      |  2.2  |
+| fuzzyTripMatching            |    `boolean`    | Whether to match trips fuzzily.                                               | *Optional* | `false`       |  2.5  |
+| trainNumberMatching          |    `boolean`    | Resolve realtime trips by train number (vehicle label) instead of trip id.    | *Optional* | `false`       |  2.9  |
+| trainNumberSynthesisIdPrefix |     `string`    | Synthetic id prefix for unresolved trains — must match the trip updater's.    | *Optional* |               |  2.9  |
+| trainNumberSynthesisRouteId  |     `string`    | Route id for synthesized trains — must match the trip updater's.              | *Optional* |               |  2.9  |
+| url                          |      `uri`      | The URL of GTFS-RT protobuf HTTP resource to download the positions from.     | *Required* |               |  2.2  |
+| [features](#u__7__features)  |    `enum set`   | Which features of GTFS RT vehicle positions should be loaded into OTP.        | *Optional* |               |  2.5  |
+| [feedIds](#u__7__feedIds)    |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.             | *Optional* |               |  2.9  |
+| [headers](#u__7__headers)    | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.    | *Optional* |               |  2.3  |
 
 
 ##### Parameter details
