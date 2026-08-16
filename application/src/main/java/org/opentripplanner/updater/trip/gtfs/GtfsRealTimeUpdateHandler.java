@@ -120,6 +120,7 @@ public class GtfsRealTimeUpdateHandler {
   public UpdateResult applyTripUpdates(
     @Nullable GtfsRealtimeFuzzyTripMatcher fuzzyTripMatcher,
     @Nullable GtfsRealtimePartialTripIdMatcher partialTripIdMatcher,
+    @Nullable GtfsRealtimeTrainNumberTripMatcher trainNumberTripMatcher,
     ForwardsDelayPropagationType forwardsDelayPropagationType,
     BackwardsDelayPropagationType backwardsDelayPropagationType,
     UpdateIncrementality updateIncrementality,
@@ -135,6 +136,7 @@ public class GtfsRealTimeUpdateHandler {
     List<UpdateError> errors = new ArrayList<>();
     Set<FeedScopedId> seenTripIds = new HashSet<>();
     int partialTripIdMatches = 0;
+    int trainNumberMatches = 0;
     int strippedEmptyStopTimeEvents = 0;
     int convertedScheduledToAdded = 0;
     int convertedScheduledToAddedDueToPatternDivergence = 0;
@@ -247,6 +249,21 @@ public class GtfsRealTimeUpdateHandler {
           var trip = partialTripIdMatcher.match(resolvedFeedId, rawTripUpdate.getTrip());
           if (!trip.getTripId().equals(originalTripId)) {
             partialTripIdMatches++;
+          }
+          rawTripUpdate = rawTripUpdate.toBuilder().setTrip(trip).build();
+        }
+
+        if (trainNumberTripMatcher != null) {
+          // Train-number identity (MTA Metro-North): the source moved the FeedEntity id into
+          // trip_id; resolve it against static trip_short_name + service date.
+          var originalTripId = rawTripUpdate.getTrip().getTripId();
+          var trip = trainNumberTripMatcher.match(
+            resolvedFeedId,
+            originalTripId,
+            rawTripUpdate.getTrip()
+          );
+          if (!trip.getTripId().equals(originalTripId)) {
+            trainNumberMatches++;
           }
           rawTripUpdate = rawTripUpdate.toBuilder().setTrip(trip).build();
         }
@@ -412,6 +429,13 @@ public class GtfsRealTimeUpdateHandler {
 
     if (updateIncrementality == FULL_DATASET) {
       ResultLogger.logUpdateResult(String.join(",", feedIds), "gtfs-rt-trip-updates", updateResult);
+    }
+    if (trainNumberTripMatcher != null && !updates.isEmpty()) {
+      LOG.info(
+        "[feedIds={}] train-number matcher diag: {} (matches applied: " + trainNumberMatches + ")",
+        feedIds,
+        trainNumberTripMatcher.summarizeCounters()
+      );
     }
     if (partialTripIdMatcher != null && !updates.isEmpty()) {
       LOG.info(

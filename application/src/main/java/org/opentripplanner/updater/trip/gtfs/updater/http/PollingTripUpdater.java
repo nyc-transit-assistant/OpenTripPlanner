@@ -54,6 +54,9 @@ public class PollingTripUpdater extends PollingGraphUpdater {
    */
   private final boolean partialTripIdMatching;
 
+  /** If true, resolve realtime trips by train number (trip_short_name), e.g. for MTA MNR. */
+  private final boolean trainNumberMatching;
+
   /** See {@code PollingTripUpdaterConfig}: shared-feed updaters must never clear unscoped. */
   private final boolean scopedFullDatasetClear;
 
@@ -71,6 +74,7 @@ public class PollingTripUpdater extends PollingGraphUpdater {
     this.fuzzyTripMatching = parameters.fuzzyTripMatching();
     this.scopedFullDatasetClear = parameters.scopedFullDatasetClear();
     this.partialTripIdMatching = parameters.partialTripIdMatching();
+    this.trainNumberMatching = parameters.trainNumberMatching();
 
     this.recordMetrics = BatchTripUpdateMetrics.batch(parameters);
 
@@ -93,6 +97,7 @@ public class PollingTripUpdater extends PollingGraphUpdater {
         adapter,
         fuzzyTripMatching,
         partialTripIdMatching,
+        trainNumberMatching,
         forwardsDelayPropagationType,
         backwardsDelayPropagationType,
         incrementality,

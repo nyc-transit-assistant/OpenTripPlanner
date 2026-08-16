@@ -51,6 +51,18 @@ public class PollingTripUpdaterConfig {
         )
         .asBoolean(false),
       c
+        .of("trainNumberMatching")
+        .since(V2_9)
+        .summary("Resolve realtime trips by train number instead of trip id.")
+        .description(
+          "Some agencies (notably MTA Metro-North) emit realtime trip ids that appear " +
+            "nowhere in the static GTFS; the FeedEntity id (trip updates) and vehicle label " +
+            "(vehicle positions) carry the train number, which matches the static " +
+            "`trip_short_name`. When enabled, the train number and start date are resolved " +
+            "against the static schedule and the trip id is rewritten before exact lookup."
+        )
+        .asBoolean(false),
+      c
         .of("scopedFullDatasetClear")
         .since(V2_9)
         .summary(

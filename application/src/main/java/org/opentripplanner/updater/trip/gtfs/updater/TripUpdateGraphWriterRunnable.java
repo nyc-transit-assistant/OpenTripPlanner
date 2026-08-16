@@ -10,6 +10,7 @@ import org.opentripplanner.updater.spi.UpdateResult;
 import org.opentripplanner.updater.trip.UpdateIncrementality;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealTimeTripUpdateAdapter;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealtimePartialTripIdMatcher;
+import org.opentripplanner.updater.trip.gtfs.GtfsRealtimeTrainNumberTripMatcher;
 import org.opentripplanner.updater.trip.gtfs.TripReplacementPeriod;
 import org.opentripplanner.updater.trip.gtfs.interpolation.BackwardsDelayPropagationType;
 import org.opentripplanner.updater.trip.gtfs.interpolation.ForwardsDelayPropagationType;
@@ -25,6 +26,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
 
   private final boolean fuzzyTripMatching;
   private final boolean partialTripIdMatching;
+  private final boolean trainNumberMatching;
 
   private final ForwardsDelayPropagationType forwardsDelayPropagationType;
   private final BackwardsDelayPropagationType backwardsDelayPropagationType;
@@ -45,6 +47,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     GtfsRealTimeTripUpdateAdapter adapter,
     boolean fuzzyTripMatching,
     boolean partialTripIdMatching,
+    boolean trainNumberMatching,
     ForwardsDelayPropagationType forwardsDelayPropagationType,
     BackwardsDelayPropagationType backwardsDelayPropagationType,
     UpdateIncrementality updateIncrementality,
@@ -57,6 +60,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     this.adapter = adapter;
     this.fuzzyTripMatching = fuzzyTripMatching;
     this.partialTripIdMatching = partialTripIdMatching;
+    this.trainNumberMatching = trainNumberMatching;
     this.forwardsDelayPropagationType = forwardsDelayPropagationType;
     this.backwardsDelayPropagationType = backwardsDelayPropagationType;
     this.updateIncrementality = updateIncrementality;
@@ -75,11 +79,15 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     var partialMatcher = partialTripIdMatching
       ? new GtfsRealtimePartialTripIdMatcher(context.transitService())
       : null;
+    var trainNumberMatcher = trainNumberMatching
+      ? new GtfsRealtimeTrainNumberTripMatcher(context.transitService())
+      : null;
     var result = adapter
       .forUpdate(context.mutableSnapshot())
       .applyTripUpdates(
         fuzzyTripMatching ? context.gtfsRealtimeFuzzyTripMatcher() : null,
         partialMatcher,
+        trainNumberMatcher,
         forwardsDelayPropagationType,
         backwardsDelayPropagationType,
         updateIncrementality,

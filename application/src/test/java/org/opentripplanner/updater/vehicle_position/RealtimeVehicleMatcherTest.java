@@ -110,6 +110,7 @@ public class RealtimeVehicleMatcherTest {
       repository,
       zoneId,
       null,
+      null,
       FEATURES
     );
 
@@ -149,6 +150,7 @@ public class RealtimeVehicleMatcherTest {
       ignored -> null,
       repository,
       zoneId,
+      null,
       null,
       FEATURES
     );
@@ -208,6 +210,7 @@ public class RealtimeVehicleMatcherTest {
       repository,
       zoneId,
       null,
+      null,
       FEATURES
     );
 
@@ -256,6 +259,7 @@ public class RealtimeVehicleMatcherTest {
       ignored -> null,
       repository,
       zoneId,
+      null,
       null,
       FEATURES
     );
@@ -317,6 +321,7 @@ public class RealtimeVehicleMatcherTest {
       ignored -> null,
       repository,
       zoneId,
+      null,
       null,
       FEATURES
     );

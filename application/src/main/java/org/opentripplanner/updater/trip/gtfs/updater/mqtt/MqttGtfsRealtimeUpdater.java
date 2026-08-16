@@ -213,6 +213,7 @@ public class MqttGtfsRealtimeUpdater implements GraphUpdater {
           adapter,
           fuzzyTripMatching,
           partialTripIdMatching,
+          false,
           forwardsDelayPropagationType,
           backwardsDelayPropagationType,
           updateIncrementality,

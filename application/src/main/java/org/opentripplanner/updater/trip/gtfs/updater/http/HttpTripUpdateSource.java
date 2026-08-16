@@ -30,6 +30,7 @@ class HttpTripUpdateSource {
    */
   private final String feedId;
   private final String url;
+  private final boolean entityIdAsTripId;
   private final HttpHeaders headers;
   private UpdateIncrementality updateIncrementality = FULL_DATASET;
   private final ExtensionRegistry registry = ExtensionRegistry.newInstance();
@@ -37,6 +38,7 @@ class HttpTripUpdateSource {
   private List<TripReplacementPeriod> lastTripReplacementPeriods = List.of();
 
   public HttpTripUpdateSource(PollingTripUpdaterParameters config) {
+    this.entityIdAsTripId = config.trainNumberMatching();
     this.feedId = config.feedId();
     this.url = config.url();
     this.headers = HttpHeaders.of().acceptProtobuf().add(config.headers()).build();
@@ -81,7 +83,16 @@ class HttpTripUpdateSource {
       updates = new ArrayList<>(feedEntityList.size());
       for (FeedEntity feedEntity : feedEntityList) {
         if (feedEntity.hasTripUpdate()) {
-          updates.add(feedEntity.getTripUpdate());
+          var tripUpdate = feedEntity.getTripUpdate();
+          if (entityIdAsTripId && !feedEntity.getId().isBlank()) {
+            // Train-number matching: the realtime identity lives in the entity id (MNR),
+            // which is dropped below — move it into the descriptor so the matcher sees it.
+            tripUpdate = tripUpdate
+              .toBuilder()
+              .setTrip(tripUpdate.getTrip().toBuilder().setTripId(feedEntity.getId()))
+              .build();
+          }
+          updates.add(tripUpdate);
         }
       }
 

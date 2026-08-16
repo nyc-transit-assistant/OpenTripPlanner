@@ -3,6 +3,7 @@ package org.opentripplanner.standalone.config.routerconfig.updaters;
 import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_2;
 import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_3;
 import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_5;
+import static org.opentripplanner.standalone.config.framework.json.OtpVersion.V2_9;
 import static org.opentripplanner.standalone.config.routerconfig.updaters.VehiclePositionsUpdaterConfig.VehiclePositionFeature.OCCUPANCY;
 import static org.opentripplanner.standalone.config.routerconfig.updaters.VehiclePositionsUpdaterConfig.VehiclePositionFeature.POSITION;
 import static org.opentripplanner.standalone.config.routerconfig.updaters.VehiclePositionsUpdaterConfig.VehiclePositionFeature.STOP_POSITION;
@@ -31,6 +32,11 @@ public class VehiclePositionsUpdaterConfig {
       .since(V2_5)
       .summary("Whether to match trips fuzzily.")
       .asBoolean(false);
+    var trainNumberMatching = c
+      .of("trainNumberMatching")
+      .since(V2_9)
+      .summary("Resolve realtime trips by train number (vehicle label) instead of trip id.")
+      .asBoolean(false);
     var features = c
       .of("features")
       .since(V2_5)
@@ -44,6 +50,7 @@ public class VehiclePositionsUpdaterConfig {
       frequency,
       headers,
       fuzzyTripMatching,
+      trainNumberMatching,
       features
     );
   }

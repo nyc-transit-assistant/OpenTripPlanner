@@ -8,6 +8,7 @@ import org.opentripplanner.service.realtimevehicles.RealtimeVehicleRepository;
 import org.opentripplanner.standalone.config.routerconfig.updaters.VehiclePositionsUpdaterConfig;
 import org.opentripplanner.updater.GraphWriterRunnable;
 import org.opentripplanner.updater.RealTimeUpdateContext;
+import org.opentripplanner.updater.trip.gtfs.GtfsRealtimeTrainNumberTripMatcher;
 
 class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
 
@@ -15,6 +16,7 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
   private final RealtimeVehicleRepository realtimeVehicleRepository;
   private final List<String> feedIds;
   private final boolean fuzzyTripMatching;
+  private final boolean trainNumberMatching;
   private final Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures;
 
   public VehiclePositionUpdaterRunnable(
@@ -22,6 +24,7 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
     Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures,
     List<String> feedIds,
     boolean fuzzyTripMatching,
+    boolean trainNumberMatching,
     List<VehiclePosition> updates
   ) {
     this.updates = Objects.requireNonNull(updates);
@@ -31,6 +34,7 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
     }
     this.realtimeVehicleRepository = realtimeVehicleRepository;
     this.fuzzyTripMatching = fuzzyTripMatching;
+    this.trainNumberMatching = trainNumberMatching;
     this.vehiclePositionFeatures = vehiclePositionFeatures;
   }
 
@@ -45,6 +49,7 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
       realtimeVehicleRepository,
       context.transitService().getTimeZone(),
       fuzzyTripMatching ? context.gtfsRealtimeFuzzyTripMatcher() : null,
+      trainNumberMatching ? new GtfsRealtimeTrainNumberTripMatcher(context.transitService()) : null,
       vehiclePositionFeatures
     );
     // Apply new vehicle positions

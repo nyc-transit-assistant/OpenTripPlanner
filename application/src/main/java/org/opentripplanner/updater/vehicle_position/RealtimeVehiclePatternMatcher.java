@@ -49,6 +49,7 @@ import org.opentripplanner.updater.spi.UpdateException;
 import org.opentripplanner.updater.spi.UpdateResult;
 import org.opentripplanner.updater.spi.UpdateSuccess;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealtimeFuzzyTripMatcher;
+import org.opentripplanner.updater.trip.gtfs.GtfsRealtimeTrainNumberTripMatcher;
 import org.opentripplanner.utils.lang.StringUtils;
 import org.opentripplanner.utils.time.ServiceDateUtils;
 import org.slf4j.Logger;
@@ -70,6 +71,7 @@ class RealtimeVehiclePatternMatcher {
   private final Function<Trip, TripPattern> getStaticPattern;
   private final BiFunction<Trip, LocalDate, TripPattern> getRealtimePattern;
   private final GtfsRealtimeFuzzyTripMatcher fuzzyTripMatcher;
+  private final GtfsRealtimeTrainNumberTripMatcher trainNumberTripMatcher;
   private final Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures;
   private Function<FeedScopedId, Set<LocalDate>> getServiceDatesForServiceId;
 
@@ -82,6 +84,7 @@ class RealtimeVehiclePatternMatcher {
     RealtimeVehicleRepository repository,
     ZoneId timeZoneId,
     GtfsRealtimeFuzzyTripMatcher fuzzyTripMatcher,
+    GtfsRealtimeTrainNumberTripMatcher trainNumberTripMatcher,
     Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures
   ) {
     this.feedIds = List.copyOf(Objects.requireNonNull(feedIds));
@@ -94,6 +97,7 @@ class RealtimeVehiclePatternMatcher {
     this.repository = repository;
     this.timeZoneId = timeZoneId;
     this.fuzzyTripMatcher = fuzzyTripMatcher;
+    this.trainNumberTripMatcher = trainNumberTripMatcher;
     this.vehiclePositionFeatures = vehiclePositionFeatures;
     this.getServiceDatesForServiceId = getServiceDatesForServiceId;
   }
@@ -379,6 +383,16 @@ class RealtimeVehiclePatternMatcher {
     var vehiclePositionWithTripId = fuzzyTripMatcher == null
       ? vehiclePosition
       : fuzzilySetTrip(vehiclePosition, feedIds.getFirst());
+    if (trainNumberTripMatcher != null) {
+      // Train-number identity (MTA Metro-North): the vehicle label carries the train number
+      // that matches static trip_short_name; the descriptor's trip id is internal-only.
+      var trip = trainNumberTripMatcher.match(
+        feedIds.getFirst(),
+        vehiclePositionWithTripId.getVehicle().getLabel(),
+        vehiclePositionWithTripId.getTrip()
+      );
+      vehiclePositionWithTripId = vehiclePositionWithTripId.toBuilder().setTrip(trip).build();
+    }
 
     var tripId = vehiclePositionWithTripId.getTrip().getTripId();
 

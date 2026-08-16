@@ -29,6 +29,7 @@ public class PollingVehiclePositionUpdater extends PollingGraphUpdater {
   private final List<String> feedIds;
   private final RealtimeVehicleRepository realtimeVehicleRepository;
   private final boolean fuzzyTripMatching;
+  private final boolean trainNumberMatching;
 
   public PollingVehiclePositionUpdater(
     VehiclePositionsUpdaterParameters params,
@@ -42,6 +43,7 @@ public class PollingVehiclePositionUpdater extends PollingGraphUpdater {
     this.realtimeVehicleRepository = realtimeVehicleRepository;
     this.feedIds = params.feedIds();
     this.fuzzyTripMatching = params.fuzzyTripMatching();
+    this.trainNumberMatching = params.trainNumberMatching();
     this.vehiclePositionFeatures = params.vehiclePositionFeatures();
 
     LOG.info(
@@ -66,6 +68,7 @@ public class PollingVehiclePositionUpdater extends PollingGraphUpdater {
       vehiclePositionFeatures,
       feedIds,
       fuzzyTripMatching,
+      trainNumberMatching,
       updates
     );
     updateGraph(runnable);

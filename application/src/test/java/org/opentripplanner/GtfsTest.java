@@ -271,6 +271,7 @@ public abstract class GtfsTest {
             .applyTripUpdates(
               null,
               null,
+              null,
               ForwardsDelayPropagationType.DEFAULT,
               BackwardsDelayPropagationType.REQUIRED_NO_DATA,
               UpdateIncrementality.DIFFERENTIAL,

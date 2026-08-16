@@ -176,6 +176,11 @@ public class TripInput {
     return this;
   }
 
+  public TripInput withShortName(String shortName) {
+    this.shortName = shortName;
+    return this;
+  }
+
   public TripInput withRoute(Route route) {
     this.route = route;
     return this;

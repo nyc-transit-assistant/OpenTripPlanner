@@ -16,6 +16,7 @@ public record VehiclePositionsUpdaterParameters(
   Duration frequency,
   HttpHeaders headers,
   boolean fuzzyTripMatching,
+  boolean trainNumberMatching,
   Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures
 ) implements PollingGraphUpdaterParameters {
   public VehiclePositionsUpdaterParameters {

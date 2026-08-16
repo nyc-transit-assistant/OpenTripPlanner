@@ -125,6 +125,7 @@ public class GtfsRtTestHelper {
               .applyTripUpdates(
                 null,
                 partialMatcher,
+                null,
                 ForwardsDelayPropagationType.DEFAULT,
                 BackwardsDelayPropagationType.REQUIRED_NO_DATA,
                 incrementality,
