@@ -36,6 +36,16 @@ import org.opentripplanner.updater.trip.patterncache.TripPatternCache;
  */
 class NewTripHandler {
 
+  /**
+   * Stops actually carried forward from the previous cycle's snapshot, running total. With
+   * the feed proxy merging departed stops into the message itself, this should stay at ZERO
+   * (the current first stop sits at index 0 of the past pattern — nothing has rolled off);
+   * a nonzero value means the in-OTP carry is doing real work again, i.e. the proxy-side
+   * harvest has a hole. Observable in the apply-path summary log. Apply path is
+   * single-threaded (updates serialize onto the graph writer).
+   */
+  int carriedForwardStopsTotal;
+
   private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(
     NewTripHandler.class
   );
@@ -299,6 +309,7 @@ class NewTripHandler {
       merged.add(new StopAndStopTimeUpdate(past.stop(), new StopTimeUpdate(update)));
     }
     merged.addAll(current);
+    carriedForwardStopsTotal += firstIndexInPast;
     LOG.debug(
       "carry[{}]: carried {} past stops ahead of {}",
       tripId,

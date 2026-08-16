@@ -462,12 +462,13 @@ public class GtfsRealTimeUpdateHandler {
       !tripReplacementPeriods.isEmpty()
     ) {
       LOG.info(
-        "[feedIds={}] partial trip-id matches: {}, cancel-by-omission: {}, converted-to-added (unresolved/path-diverged): {}/{} (periods: total={}, active-routes={}, expired={})",
+        "[feedIds={}] partial trip-id matches: {}, cancel-by-omission: {}, converted-to-added (unresolved/path-diverged): {}/{}, carriedForwardStops(total): {} (periods: total={}, active-routes={}, expired={})",
         feedIds,
         partialTripIdMatches,
         cancelledByOmission,
         convertedScheduledToAdded,
         convertedScheduledToAddedDueToPatternDivergence,
+        addedTripHandler.carriedForwardStopsTotal,
         tripReplacementPeriods.size(),
         coveredRouteIds,
         expiredPeriods
