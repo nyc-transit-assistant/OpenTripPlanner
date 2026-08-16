@@ -3,6 +3,7 @@ package org.opentripplanner.updater.trip.gtfs.updater.http;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import javax.annotation.Nullable;
 import org.opentripplanner.framework.io.HttpHeaders;
 import org.opentripplanner.updater.spi.PollingGraphUpdaterParameters;
 import org.opentripplanner.updater.trip.UrlUpdaterParameters;
@@ -15,6 +16,8 @@ public record PollingTripUpdaterParameters(
   boolean fuzzyTripMatching,
   boolean partialTripIdMatching,
   boolean trainNumberMatching,
+  @Nullable String trainNumberSynthesisIdPrefix,
+  @Nullable String trainNumberSynthesisRouteId,
   boolean scopedFullDatasetClear,
   ForwardsDelayPropagationType forwardsDelayPropagationType,
   BackwardsDelayPropagationType backwardsDelayPropagationType,

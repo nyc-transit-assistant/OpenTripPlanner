@@ -27,6 +27,8 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
   private final boolean fuzzyTripMatching;
   private final boolean partialTripIdMatching;
   private final boolean trainNumberMatching;
+  private final String trainNumberSynthesisIdPrefix;
+  private final String trainNumberSynthesisRouteId;
 
   private final ForwardsDelayPropagationType forwardsDelayPropagationType;
   private final BackwardsDelayPropagationType backwardsDelayPropagationType;
@@ -48,6 +50,8 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     boolean fuzzyTripMatching,
     boolean partialTripIdMatching,
     boolean trainNumberMatching,
+    String trainNumberSynthesisIdPrefix,
+    String trainNumberSynthesisRouteId,
     ForwardsDelayPropagationType forwardsDelayPropagationType,
     BackwardsDelayPropagationType backwardsDelayPropagationType,
     UpdateIncrementality updateIncrementality,
@@ -61,6 +65,8 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     this.fuzzyTripMatching = fuzzyTripMatching;
     this.partialTripIdMatching = partialTripIdMatching;
     this.trainNumberMatching = trainNumberMatching;
+    this.trainNumberSynthesisIdPrefix = trainNumberSynthesisIdPrefix;
+    this.trainNumberSynthesisRouteId = trainNumberSynthesisRouteId;
     this.forwardsDelayPropagationType = forwardsDelayPropagationType;
     this.backwardsDelayPropagationType = backwardsDelayPropagationType;
     this.updateIncrementality = updateIncrementality;
@@ -80,7 +86,15 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
       ? new GtfsRealtimePartialTripIdMatcher(context.transitService())
       : null;
     var trainNumberMatcher = trainNumberMatching
-      ? new GtfsRealtimeTrainNumberTripMatcher(context.transitService())
+      ? new GtfsRealtimeTrainNumberTripMatcher(
+          context.transitService(),
+          trainNumberSynthesisIdPrefix != null
+            ? new GtfsRealtimeTrainNumberTripMatcher.SynthesisConfig(
+                trainNumberSynthesisIdPrefix,
+                trainNumberSynthesisRouteId
+              )
+            : null
+        )
       : null;
     var result = adapter
       .forUpdate(context.mutableSnapshot())

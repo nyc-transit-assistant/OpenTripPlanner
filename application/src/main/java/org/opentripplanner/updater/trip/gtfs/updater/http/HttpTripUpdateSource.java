@@ -84,12 +84,14 @@ class HttpTripUpdateSource {
       for (FeedEntity feedEntity : feedEntityList) {
         if (feedEntity.hasTripUpdate()) {
           var tripUpdate = feedEntity.getTripUpdate();
-          if (entityIdAsTripId && !feedEntity.getId().isBlank()) {
-            // Train-number matching: the realtime identity lives in the entity id (MNR),
-            // which is dropped below — move it into the descriptor so the matcher sees it.
+          if (entityIdAsTripId && !feedEntity.getId().isBlank() && !tripUpdate.hasVehicle()) {
+            // Train-number matching: some producers (MNR) publish the train number only as
+            // the FeedEntity id, which is dropped below. Stash it in the vehicle label so the
+            // matcher sees it; producers that already send a vehicle descriptor (NJT rail,
+            // vehicle.id = train number) are left untouched.
             tripUpdate = tripUpdate
               .toBuilder()
-              .setTrip(tripUpdate.getTrip().toBuilder().setTripId(feedEntity.getId()))
+              .setVehicle(GtfsRealtime.VehicleDescriptor.newBuilder().setLabel(feedEntity.getId()))
               .build();
           }
           updates.add(tripUpdate);

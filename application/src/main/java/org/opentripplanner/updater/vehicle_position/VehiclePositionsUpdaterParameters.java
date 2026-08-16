@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import javax.annotation.Nullable;
 import org.opentripplanner.framework.io.HttpHeaders;
 import org.opentripplanner.standalone.config.routerconfig.updaters.VehiclePositionsUpdaterConfig;
 import org.opentripplanner.updater.spi.PollingGraphUpdaterParameters;
@@ -17,6 +18,8 @@ public record VehiclePositionsUpdaterParameters(
   HttpHeaders headers,
   boolean fuzzyTripMatching,
   boolean trainNumberMatching,
+  @Nullable String trainNumberSynthesisIdPrefix,
+  @Nullable String trainNumberSynthesisRouteId,
   Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures
 ) implements PollingGraphUpdaterParameters {
   public VehiclePositionsUpdaterParameters {

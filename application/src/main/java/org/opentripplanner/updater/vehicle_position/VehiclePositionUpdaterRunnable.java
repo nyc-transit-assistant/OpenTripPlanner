@@ -17,6 +17,8 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
   private final List<String> feedIds;
   private final boolean fuzzyTripMatching;
   private final boolean trainNumberMatching;
+  private final String trainNumberSynthesisIdPrefix;
+  private final String trainNumberSynthesisRouteId;
   private final Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures;
 
   public VehiclePositionUpdaterRunnable(
@@ -25,6 +27,8 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
     List<String> feedIds,
     boolean fuzzyTripMatching,
     boolean trainNumberMatching,
+    String trainNumberSynthesisIdPrefix,
+    String trainNumberSynthesisRouteId,
     List<VehiclePosition> updates
   ) {
     this.updates = Objects.requireNonNull(updates);
@@ -35,6 +39,8 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
     this.realtimeVehicleRepository = realtimeVehicleRepository;
     this.fuzzyTripMatching = fuzzyTripMatching;
     this.trainNumberMatching = trainNumberMatching;
+    this.trainNumberSynthesisIdPrefix = trainNumberSynthesisIdPrefix;
+    this.trainNumberSynthesisRouteId = trainNumberSynthesisRouteId;
     this.vehiclePositionFeatures = vehiclePositionFeatures;
   }
 
@@ -49,7 +55,17 @@ class VehiclePositionUpdaterRunnable implements GraphWriterRunnable {
       realtimeVehicleRepository,
       context.transitService().getTimeZone(),
       fuzzyTripMatching ? context.gtfsRealtimeFuzzyTripMatcher() : null,
-      trainNumberMatching ? new GtfsRealtimeTrainNumberTripMatcher(context.transitService()) : null,
+      trainNumberMatching
+        ? new GtfsRealtimeTrainNumberTripMatcher(
+            context.transitService(),
+            trainNumberSynthesisIdPrefix != null
+              ? new GtfsRealtimeTrainNumberTripMatcher.SynthesisConfig(
+                  trainNumberSynthesisIdPrefix,
+                  trainNumberSynthesisRouteId
+                )
+              : null
+          )
+        : null,
       vehiclePositionFeatures
     );
     // Apply new vehicle positions

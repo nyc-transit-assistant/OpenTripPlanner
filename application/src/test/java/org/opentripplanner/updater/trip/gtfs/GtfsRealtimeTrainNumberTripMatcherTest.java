@@ -160,6 +160,59 @@ public class GtfsRealtimeTrainNumberTripMatcherTest {
   }
 
   @Test
+  void synthesisGivesUnresolvedAddedTrainsADeterministicIdentity() {
+    // The NJT rail case: a genuine unscheduled train arrives ADDED with no trip id and no
+    // route. With synthesis configured it must get `<prefix><train>-<date>`, the default
+    // route, and stay ADDED — the same identity every polling cycle.
+    var matcher = new GtfsRealtimeTrainNumberTripMatcher(
+      env.transitService(),
+      new GtfsRealtimeTrainNumberTripMatcher.SynthesisConfig("NJT-", "17")
+    );
+    var trip = TripDescriptor.newBuilder()
+      .setScheduleRelationship(TripDescriptor.ScheduleRelationship.ADDED)
+      .setStartDate(GTFS_SERVICE_DATE)
+      .build();
+    var matched = matcher.match(FEED_ID, "4501", trip);
+    assertEquals("NJT-4501-" + GTFS_SERVICE_DATE, matched.getTripId());
+    assertEquals("17", matched.getRouteId());
+    assertEquals(TripDescriptor.ScheduleRelationship.ADDED, matched.getScheduleRelationship());
+  }
+
+  @Test
+  void synthesisNeverTouchesScheduledEntitiesWithRealIds() {
+    // A SCHEDULED entity whose id simply doesn't resolve is someone else's problem
+    // (TRIP_NOT_FOUND); synthesizing it would fabricate service.
+    var matcher = new GtfsRealtimeTrainNumberTripMatcher(
+      env.transitService(),
+      new GtfsRealtimeTrainNumberTripMatcher.SynthesisConfig("NJT-", "17")
+    );
+    var trip = TripDescriptor.newBuilder()
+      .setTripId("stale-but-real-id")
+      .setScheduleRelationship(TripDescriptor.ScheduleRelationship.SCHEDULED)
+      .setStartDate(GTFS_SERVICE_DATE)
+      .build();
+    var matched = matcher.match(FEED_ID, "4501", trip);
+    assertEquals("stale-but-real-id", matched.getTripId());
+  }
+
+  @Test
+  void resolvableAddedTrainIsRescheduledNotSynthesized() {
+    // NJT mislabels some scheduled trains ADDED (late-night next-service-day departures);
+    // when the train number resolves, the static identity wins over synthesis.
+    var matcher = new GtfsRealtimeTrainNumberTripMatcher(
+      env.transitService(),
+      new GtfsRealtimeTrainNumberTripMatcher.SynthesisConfig("NJT-", "17")
+    );
+    var trip = TripDescriptor.newBuilder()
+      .setScheduleRelationship(TripDescriptor.ScheduleRelationship.ADDED)
+      .setStartDate(GTFS_SERVICE_DATE)
+      .setRouteId("3")
+      .build();
+    var matched = matcher.match(FEED_ID, TRAIN_NUMBER, trip);
+    assertEquals(STATIC_TRIP_ID, matched.getTripId());
+  }
+
+  @Test
   void blankTrainNumberLeavesDescriptorUntouched() {
     var matched = matcher().match(FEED_ID, "  ", descriptor().build());
     assertEquals(INTERNAL_RT_TRIP_ID, matched.getTripId());

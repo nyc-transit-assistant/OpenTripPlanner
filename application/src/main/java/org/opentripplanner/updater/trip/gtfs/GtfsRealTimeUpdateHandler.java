@@ -254,12 +254,15 @@ public class GtfsRealTimeUpdateHandler {
         }
 
         if (trainNumberTripMatcher != null) {
-          // Train-number identity (MTA Metro-North): the source moved the FeedEntity id into
-          // trip_id; resolve it against static trip_short_name + service date.
+          // Train-number identity (MTA Metro-North, NJT rail): the vehicle descriptor carries
+          // the train number — natively (NJT vehicle.id) or stashed there by the source from
+          // the FeedEntity id (MNR). Resolve it against static trip_short_name + service date.
+          var vehicle = rawTripUpdate.getVehicle();
+          var trainNumber = !vehicle.getLabel().isBlank() ? vehicle.getLabel() : vehicle.getId();
           var originalTripId = rawTripUpdate.getTrip().getTripId();
           var trip = trainNumberTripMatcher.match(
             resolvedFeedId,
-            originalTripId,
+            trainNumber,
             rawTripUpdate.getTrip()
           );
           if (!trip.getTripId().equals(originalTripId)) {

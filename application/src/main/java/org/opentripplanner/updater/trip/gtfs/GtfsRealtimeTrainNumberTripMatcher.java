@@ -1,11 +1,13 @@
 package org.opentripplanner.updater.trip.gtfs;
 
 import com.google.transit.realtime.GtfsRealtime.TripDescriptor;
+import com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship;
 import java.text.ParseException;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transit.model.timetable.Trip;
 import org.opentripplanner.transit.service.TransitService;
@@ -47,6 +49,19 @@ public class GtfsRealtimeTrainNumberTripMatcher {
 
   private final TransitService transitService;
 
+  /**
+   * When non-null, unresolved trains that are ADDED or carry no trip id are synthesized:
+   * they get the deterministic id {@code <idPrefix><train>-<date>} (so the same physical
+   * train keeps one identity across polling cycles), the configured route when the
+   * descriptor has none, and stay ADDED so downstream code builds them as extra service.
+   * This is the NJT rail case: genuine unscheduled event shuttles (Meadowlands) appear as
+   * ADDED entities with blank trip ids and no route.
+   */
+  @Nullable
+  private final SynthesisConfig synthesis;
+
+  public record SynthesisConfig(String idPrefix, @Nullable String defaultRouteId) {}
+
   /** feedId -> normalized train number -> trips carrying that trip_short_name. */
   private final Map<String, Map<String, List<Trip>>> indexByFeed = new HashMap<>();
 
@@ -60,17 +75,27 @@ public class GtfsRealtimeTrainNumberTripMatcher {
   public int ambiguousCount;
   public int matchedCount;
   public int matchedOnAlternateDateCount;
+  public int synthesizedCount;
 
   public GtfsRealtimeTrainNumberTripMatcher(TransitService transitService) {
+    this(transitService, null);
+  }
+
+  public GtfsRealtimeTrainNumberTripMatcher(
+    TransitService transitService,
+    @Nullable SynthesisConfig synthesis
+  ) {
     this.transitService = transitService;
+    this.synthesis = synthesis;
   }
 
   public String summarizeCounters() {
     return String.format(
-      "calls=%d, matched=%d (alternateDate=%d, ambiguous=%d), missingTrainNumber=%d, alreadyResolved=%d, parseStartDateFailed=%d, noCandidates=%d, candidatesButNoActiveService=%d",
+      "calls=%d, matched=%d (alternateDate=%d, synthesized=%d, ambiguous=%d), missingTrainNumber=%d, alreadyResolved=%d, parseStartDateFailed=%d, noCandidates=%d, candidatesButNoActiveService=%d",
       callCount,
       matchedCount,
       matchedOnAlternateDateCount,
+      synthesizedCount,
       ambiguousCount,
       missingTrainNumberCount,
       alreadyResolvedCount,
@@ -129,7 +154,7 @@ public class GtfsRealtimeTrainNumberTripMatcher {
           serviceDate
         );
       }
-      return trip;
+      return synthesizeIfEligible(trip, normalized, serviceDate);
     }
     // Vehicle positions omit route_id; when the trip-update side supplies it, use it as an
     // extra guard against short-name collisions across routes.
@@ -203,7 +228,41 @@ public class GtfsRealtimeTrainNumberTripMatcher {
         serviceDate
       );
     }
-    return trip;
+    return synthesizeIfEligible(trip, normalized, serviceDate);
+  }
+
+  /**
+   * Unresolvable train: when synthesis is configured and the entity is ADDED or carries no
+   * trip id (a SCHEDULED entity with a real-but-unresolvable id is left for the regular
+   * lookup path to report), give it a deterministic identity so it can be built as an added
+   * trip and keeps that identity across polling cycles.
+   */
+  private TripDescriptor synthesizeIfEligible(
+    TripDescriptor trip,
+    String trainNumber,
+    LocalDate serviceDate
+  ) {
+    if (synthesis == null) {
+      return trip;
+    }
+    boolean eligible =
+      trip.getScheduleRelationship() == ScheduleRelationship.ADDED ||
+      !trip.hasTripId() ||
+      trip.getTripId().isBlank();
+    if (!eligible) {
+      return trip;
+    }
+    var builder = trip
+      .toBuilder()
+      .setTripId(
+        synthesis.idPrefix() + trainNumber + "-" + ServiceDateUtils.asCompactString(serviceDate)
+      )
+      .setScheduleRelationship(ScheduleRelationship.ADDED);
+    if (!trip.hasRouteId() && synthesis.defaultRouteId() != null) {
+      builder.setRouteId(synthesis.defaultRouteId());
+    }
+    synthesizedCount++;
+    return builder.build();
   }
 
   /** Scheduled departure at the first stop, in seconds from service-date midnight. */

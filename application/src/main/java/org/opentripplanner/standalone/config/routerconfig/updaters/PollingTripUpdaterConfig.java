@@ -63,6 +63,22 @@ public class PollingTripUpdaterConfig {
         )
         .asBoolean(false),
       c
+        .of("trainNumberSynthesisIdPrefix")
+        .since(V2_9)
+        .summary("Synthesize unresolved ADDED/id-less trains as `<prefix><train>-<date>`.")
+        .description(
+          "Only with `trainNumberMatching`. When a train number resolves to no static trip " +
+            "and the entity is ADDED or has no trip id (NJT rail's unscheduled event " +
+            "shuttles), give it this deterministic id so it is built as an added trip and " +
+            "keeps one identity across polling cycles. Unset disables synthesis."
+        )
+        .asString(null),
+      c
+        .of("trainNumberSynthesisRouteId")
+        .since(V2_9)
+        .summary("Route id assigned to synthesized trains whose descriptor carries none.")
+        .asString(null),
+      c
         .of("scopedFullDatasetClear")
         .since(V2_9)
         .summary(

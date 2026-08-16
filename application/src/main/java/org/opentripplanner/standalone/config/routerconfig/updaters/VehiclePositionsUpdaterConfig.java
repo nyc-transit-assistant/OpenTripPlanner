@@ -37,6 +37,16 @@ public class VehiclePositionsUpdaterConfig {
       .since(V2_9)
       .summary("Resolve realtime trips by train number (vehicle label) instead of trip id.")
       .asBoolean(false);
+    var trainNumberSynthesisIdPrefix = c
+      .of("trainNumberSynthesisIdPrefix")
+      .since(V2_9)
+      .summary("Synthetic id prefix for unresolved trains — must match the trip updater's.")
+      .asString(null);
+    var trainNumberSynthesisRouteId = c
+      .of("trainNumberSynthesisRouteId")
+      .since(V2_9)
+      .summary("Route id for synthesized trains — must match the trip updater's.")
+      .asString(null);
     var features = c
       .of("features")
       .since(V2_5)
@@ -51,6 +61,8 @@ public class VehiclePositionsUpdaterConfig {
       headers,
       fuzzyTripMatching,
       trainNumberMatching,
+      trainNumberSynthesisIdPrefix,
+      trainNumberSynthesisRouteId,
       features
     );
   }

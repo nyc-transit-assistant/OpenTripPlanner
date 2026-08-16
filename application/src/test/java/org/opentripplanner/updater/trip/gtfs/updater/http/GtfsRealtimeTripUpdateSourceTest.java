@@ -22,6 +22,8 @@ public class GtfsRealtimeTripUpdateSourceTest {
         false,
         false,
         false,
+        null,
+        null,
         false,
         ForwardsDelayPropagationType.DEFAULT,
         BackwardsDelayPropagationType.ALWAYS,

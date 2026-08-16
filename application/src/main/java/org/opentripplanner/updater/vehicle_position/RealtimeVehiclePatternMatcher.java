@@ -386,9 +386,10 @@ class RealtimeVehiclePatternMatcher {
     if (trainNumberTripMatcher != null) {
       // Train-number identity (MTA Metro-North): the vehicle label carries the train number
       // that matches static trip_short_name; the descriptor's trip id is internal-only.
+      var descriptor = vehiclePositionWithTripId.getVehicle();
       var trip = trainNumberTripMatcher.match(
         feedIds.getFirst(),
-        vehiclePositionWithTripId.getVehicle().getLabel(),
+        !descriptor.getLabel().isBlank() ? descriptor.getLabel() : descriptor.getId(),
         vehiclePositionWithTripId.getTrip()
       );
       vehiclePositionWithTripId = vehiclePositionWithTripId.toBuilder().setTrip(trip).build();
