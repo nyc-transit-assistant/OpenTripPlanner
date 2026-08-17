@@ -604,6 +604,12 @@ public class BuildConfig implements OtpDataStoreConfig {
         transfers that no single GTFS dataset can express. Only `transfer_type` 2 (minimum-time)
         is supported; `min_transfer_time` is the signposted walk time in seconds and the optional
         `wheelchair_min_transfer_time` column is the wheelchair time (empty = not accessible).
+        An optional `wheelchair_elevators` column lists pipe-separated elevator unit codes the
+        wheelchair path requires: when the realtime equipment feed reports any of them out of
+        service the transfer is omitted from wheelchair searches. Optional
+        `from_stop_name`/`to_stop_name` columns are name guards: the resolved stop or station
+        name must contain the value (case-insensitive) or the row is skipped, so a publisher
+        reassigning stop ids fails loudly instead of linking the wrong station.
         Curated links replace street-generated walk transfers for their stop pair.
         """
       )

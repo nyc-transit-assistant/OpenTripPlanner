@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
 import org.opentripplanner.core.model.id.FeedScopedId;
@@ -24,6 +25,11 @@ import org.opentripplanner.transfer.regular.model.CuratedPathTransfer;
  * {@code wheelchair_min_transfer_time} is the extension column: empty means the transfer is not
  * wheelchair-accessible. Rows are directional; curate both directions explicitly.
  * <p>
+ * Optional {@code wheelchair_elevators} is a pipe-separated list of operator elevator unit
+ * codes (e.g. {@code EL290|EL291}) the wheelchair path requires — every listed unit must be in
+ * service or the transfer is omitted from wheelchair searches. List only single points of
+ * failure on the signed accessible route, not redundant parallel elevators.
+ * <p>
  * Optional {@code from_stop_name}/{@code to_stop_name} columns are name guards: publishers like
  * NJ Transit REASSIGN numeric stop ids between picks, which would silently re-point a curated
  * link at a different station. When present, the resolved stop or station's name must contain
@@ -37,7 +43,8 @@ public class TransferLinksParser {
     int minTransferTimeSeconds,
     int wheelchairMinTransferTimeSeconds,
     @Nullable String fromNameGuard,
-    @Nullable String toNameGuard
+    @Nullable String toNameGuard,
+    List<String> wheelchairElevators
   ) {
     public TransferLinkRow(
       FeedScopedId from,
@@ -45,7 +52,15 @@ public class TransferLinksParser {
       int minTransferTimeSeconds,
       int wheelchairMinTransferTimeSeconds
     ) {
-      this(from, to, minTransferTimeSeconds, wheelchairMinTransferTimeSeconds, null, null);
+      this(
+        from,
+        to,
+        minTransferTimeSeconds,
+        wheelchairMinTransferTimeSeconds,
+        null,
+        null,
+        List.of()
+      );
     }
   }
 
@@ -79,6 +94,13 @@ public class TransferLinksParser {
         int wheelchairTime = (wheelchairRaw == null || wheelchairRaw.isBlank())
           ? CuratedPathTransfer.NOT_WHEELCHAIR_ACCESSIBLE
           : Integer.parseInt(wheelchairRaw.trim());
+        var elevatorsRaw = blankToNull(reader.get("wheelchair_elevators"));
+        List<String> elevators = elevatorsRaw == null
+          ? List.of()
+          : Arrays.stream(elevatorsRaw.split("\\|"))
+              .map(String::trim)
+              .filter(e -> !e.isEmpty())
+              .toList();
         rows.add(
           new TransferLinkRow(
             from,
@@ -86,7 +108,8 @@ public class TransferLinksParser {
             minTransferTime,
             wheelchairTime,
             blankToNull(reader.get("from_stop_name")),
-            blankToNull(reader.get("to_stop_name"))
+            blankToNull(reader.get("to_stop_name")),
+            elevators
           )
         );
       }

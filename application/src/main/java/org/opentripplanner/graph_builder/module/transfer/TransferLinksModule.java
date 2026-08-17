@@ -94,7 +94,8 @@ public class TransferLinksModule implements GraphBuilderModule {
             to,
             distance,
             row.minTransferTimeSeconds(),
-            row.wheelchairMinTransferTimeSeconds()
+            row.wheelchairMinTransferTimeSeconds(),
+            row.wheelchairElevators()
           );
           transferRepository.replaceWalkTransfer(from, to, transfer);
           applied++;

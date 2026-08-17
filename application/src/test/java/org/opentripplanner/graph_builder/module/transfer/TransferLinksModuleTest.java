@@ -179,6 +179,56 @@ class TransferLinksModuleTest {
   }
 
   @Test
+  void elevatorOutageGatesWheelchairTransfer() {
+    var curated = new CuratedPathTransfer(STOP_A, STOP_B, 150, 240, 360, List.of("EL290", "EL291"));
+
+    // Walking search unaffected by outages
+    var walking = curated.asRaptorTransfer(
+      StreetSearchRequest.of()
+        .withWheelchair(w -> w.withInoperativeEquipment(java.util.Set.of("EL290")))
+        .build()
+    );
+    assertEquals(240, walking.orElseThrow().durationInSeconds());
+
+    // Wheelchair search with all elevators in service: uses wheelchair time
+    var allWorking = curated.asRaptorTransfer(
+      StreetSearchRequest.of().withWheelchairEnabled(true).build()
+    );
+    assertEquals(360, allWorking.orElseThrow().durationInSeconds());
+
+    // Any required unit out: transfer omitted from wheelchair searches
+    var gated = curated.asRaptorTransfer(
+      StreetSearchRequest.of()
+        .withWheelchairEnabled(true)
+        .withWheelchair(w -> w.withInoperativeEquipment(java.util.Set.of("EL291")))
+        .build()
+    );
+    assertTrue(gated.isEmpty());
+
+    // Unrelated outage does not gate
+    var unrelated = curated.asRaptorTransfer(
+      StreetSearchRequest.of()
+        .withWheelchairEnabled(true)
+        .withWheelchair(w -> w.withInoperativeEquipment(java.util.Set.of("EL999")))
+        .build()
+    );
+    assertEquals(360, unrelated.orElseThrow().durationInSeconds());
+  }
+
+  @Test
+  void parserReadsWheelchairElevators() {
+    var rows = TransferLinksParser.parse(
+      new ByteArrayInputStream(
+        ("from_stop_id,to_stop_id,transfer_type,min_transfer_time,wheelchair_min_transfer_time,wheelchair_elevators\n" +
+          "F:A,F:B,2,240,360,EL290|EL291\n" +
+          "F:B,F:A,2,240,360,\n").getBytes(StandardCharsets.UTF_8)
+      )
+    );
+    assertEquals(List.of("EL290", "EL291"), rows.get(0).wheelchairElevators());
+    assertTrue(rows.get(1).wheelchairElevators().isEmpty());
+  }
+
+  @Test
   void nameGuardRejectsReassignedId() {
     var transferRepository = new DefaultTransferRepository(new TransferIndex());
     var issueStore = new DefaultDataImportIssueStore();
