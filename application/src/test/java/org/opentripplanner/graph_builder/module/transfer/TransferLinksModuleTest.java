@@ -144,6 +144,41 @@ class TransferLinksModuleTest {
   }
 
   @Test
+  void stationEndpointExpandsToChildStops() {
+    var station = TEST_MODEL.station("STN-PABT").build();
+    var gate1 = TEST_MODEL.stop("gate-1", 40.757, -73.99).withParentStation(station).build();
+    var gate2 = TEST_MODEL.stop("gate-2", 40.7571, -73.9901).withParentStation(station).build();
+    var timetableRepository = new TimetableRepository(
+      TEST_MODEL.siteRepositoryBuilder()
+        .withStation(station)
+        .withRegularStop(gate1)
+        .withRegularStop(gate2)
+        .withRegularStop(STOP_A)
+        .build()
+    );
+    var transferRepository = new DefaultTransferRepository(new TransferIndex());
+    var module = new TransferLinksModule(
+      timetableRepository,
+      transferRepository,
+      new DefaultDataImportIssueStore(),
+      TransferLinksParser.parse(
+        new ByteArrayInputStream(csv("F:STN-PABT,F:A,2,240,\n").getBytes(StandardCharsets.UTF_8))
+      )
+    );
+    module.buildGraph();
+
+    // one curated transfer per child gate stop
+    assertEquals(1, transferRepository.findTransfersByStop(gate1).size());
+    assertEquals(1, transferRepository.findTransfersByStop(gate2).size());
+    assertTrue(
+      transferRepository
+        .findTransfersByStop(gate1)
+        .stream()
+        .allMatch(t -> t instanceof CuratedPathTransfer && t.to.equals(STOP_A))
+    );
+  }
+
+  @Test
   void parserRejectsUnsupportedTransferType() {
     assertThrows(IllegalArgumentException.class, () ->
       TransferLinksParser.parse(

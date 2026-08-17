@@ -3,6 +3,7 @@ package org.opentripplanner.graph_builder.module.transfer;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.datastore.api.DataSource;
 import org.opentripplanner.graph_builder.issue.api.DataImportIssueStore;
 import org.opentripplanner.graph_builder.issue.api.Issue;
@@ -10,6 +11,7 @@ import org.opentripplanner.graph_builder.model.GraphBuilderModule;
 import org.opentripplanner.graph_builder.module.transfer.TransferLinksParser.TransferLinkRow;
 import org.opentripplanner.transfer.regular.TransferRepository;
 import org.opentripplanner.transfer.regular.model.CuratedPathTransfer;
+import org.opentripplanner.transit.model.site.RegularStop;
 import org.opentripplanner.transit.service.TimetableRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,36 +47,69 @@ public class TransferLinksModule implements GraphBuilderModule {
 
   @Override
   public void buildGraph() {
-    var siteRepository = timetableRepository.getSiteRepository();
     int applied = 0;
+    int skipped = 0;
     for (TransferLinkRow row : rows) {
-      var from = siteRepository.getRegularStop(row.from());
-      var to = siteRepository.getRegularStop(row.to());
-      if (from == null || to == null) {
+      var fromStops = resolve(row.from());
+      var toStops = resolve(row.to());
+      if (fromStops.isEmpty() || toStops.isEmpty()) {
         issueStore.add(
           Issue.issue(
             "TransferLinkStopNotFound",
             "Transfer link %s -> %s skipped: %s not found in any loaded feed",
             row.from(),
             row.to(),
-            from == null ? row.from() : row.to()
+            fromStops.isEmpty() ? row.from() : row.to()
           )
         );
+        skipped++;
         continue;
       }
-      double distance = from.getCoordinate().distanceTo(to.getCoordinate());
-      var transfer = new CuratedPathTransfer(
-        from,
-        to,
-        distance,
-        row.minTransferTimeSeconds(),
-        row.wheelchairMinTransferTimeSeconds()
-      );
-      transferRepository.replaceWalkTransfer(from, to, transfer);
-      applied++;
+      for (var from : fromStops) {
+        for (var to : toStops) {
+          double distance = from.getCoordinate().distanceTo(to.getCoordinate());
+          var transfer = new CuratedPathTransfer(
+            from,
+            to,
+            distance,
+            row.minTransferTimeSeconds(),
+            row.wheelchairMinTransferTimeSeconds()
+          );
+          transferRepository.replaceWalkTransfer(from, to, transfer);
+          applied++;
+        }
+      }
     }
     transferRepository.index();
-    LOG.info("Applied {} curated transfer links ({} rows in file)", applied, rows.size());
+    LOG.info(
+      "Applied {} curated transfers from {} rows ({} rows skipped)",
+      applied,
+      rows.size(),
+      skipped
+    );
+  }
+
+  /**
+   * A file endpoint may name a platform-level stop directly, or a station — terminals whose
+   * per-gate stop ids churn every pick (Port Authority) are curated by their stable station id
+   * and expanded to whatever child stops the current feed carries.
+   */
+  private List<RegularStop> resolve(FeedScopedId id) {
+    var siteRepository = timetableRepository.getSiteRepository();
+    var stop = siteRepository.getRegularStop(id);
+    if (stop != null) {
+      return List.of(stop);
+    }
+    var station = siteRepository.getStationById(id);
+    if (station != null) {
+      return station
+        .getChildStops()
+        .stream()
+        .filter(RegularStop.class::isInstance)
+        .map(RegularStop.class::cast)
+        .toList();
+    }
+    return List.of();
   }
 
   public static TransferLinksModule of(
