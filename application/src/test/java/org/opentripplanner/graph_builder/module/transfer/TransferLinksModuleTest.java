@@ -179,6 +179,31 @@ class TransferLinksModuleTest {
   }
 
   @Test
+  void nameGuardRejectsReassignedId() {
+    var transferRepository = new DefaultTransferRepository(new TransferIndex());
+    var issueStore = new DefaultDataImportIssueStore();
+    var module = new TransferLinksModule(
+      timetableRepository(),
+      transferRepository,
+      issueStore,
+      TransferLinksParser.parse(
+        new ByteArrayInputStream(
+          ("from_stop_id,to_stop_id,transfer_type,min_transfer_time,wheelchair_min_transfer_time,from_stop_name,to_stop_name\n" +
+            // guard matches (stop A is named "A") -> applied
+            "F:A,F:B,2,240,,A,B\n" +
+            // guard mismatch: id F:A exists but is NOT named "Penn Station" -> skipped
+            "F:A,F:B,2,240,,Penn Station,\n").getBytes(StandardCharsets.UTF_8)
+        )
+      )
+    );
+    module.buildGraph();
+
+    assertEquals(1, transferRepository.findTransfersByStop(STOP_A).size());
+    assertEquals(1, issueStore.listIssues().size());
+    assertEquals("TransferLinkStopNameMismatch", issueStore.listIssues().get(0).getType());
+  }
+
+  @Test
   void parserRejectsUnsupportedTransferType() {
     assertThrows(IllegalArgumentException.class, () ->
       TransferLinksParser.parse(

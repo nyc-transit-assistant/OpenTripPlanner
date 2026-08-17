@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.transfer.regular.model.CuratedPathTransfer;
 
@@ -22,6 +23,11 @@ import org.opentripplanner.transfer.regular.model.CuratedPathTransfer;
  * {@code transfer_type} must be 2 (minimum-time transfer, the only supported type).
  * {@code wheelchair_min_transfer_time} is the extension column: empty means the transfer is not
  * wheelchair-accessible. Rows are directional; curate both directions explicitly.
+ * <p>
+ * Optional {@code from_stop_name}/{@code to_stop_name} columns are name guards: publishers like
+ * NJ Transit REASSIGN numeric stop ids between picks, which would silently re-point a curated
+ * link at a different station. When present, the resolved stop or station's name must contain
+ * the guard (case-insensitive) or the row is skipped with an issue.
  */
 public class TransferLinksParser {
 
@@ -29,8 +35,19 @@ public class TransferLinksParser {
     FeedScopedId from,
     FeedScopedId to,
     int minTransferTimeSeconds,
-    int wheelchairMinTransferTimeSeconds
-  ) {}
+    int wheelchairMinTransferTimeSeconds,
+    @Nullable String fromNameGuard,
+    @Nullable String toNameGuard
+  ) {
+    public TransferLinkRow(
+      FeedScopedId from,
+      FeedScopedId to,
+      int minTransferTimeSeconds,
+      int wheelchairMinTransferTimeSeconds
+    ) {
+      this(from, to, minTransferTimeSeconds, wheelchairMinTransferTimeSeconds, null, null);
+    }
+  }
 
   public static List<TransferLinkRow> parse(InputStream is) {
     try {
@@ -62,11 +79,25 @@ public class TransferLinksParser {
         int wheelchairTime = (wheelchairRaw == null || wheelchairRaw.isBlank())
           ? CuratedPathTransfer.NOT_WHEELCHAIR_ACCESSIBLE
           : Integer.parseInt(wheelchairRaw.trim());
-        rows.add(new TransferLinkRow(from, to, minTransferTime, wheelchairTime));
+        rows.add(
+          new TransferLinkRow(
+            from,
+            to,
+            minTransferTime,
+            wheelchairTime,
+            blankToNull(reader.get("from_stop_name")),
+            blankToNull(reader.get("to_stop_name"))
+          )
+        );
       }
       return rows;
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  @Nullable
+  private static String blankToNull(@Nullable String s) {
+    return s == null || s.isBlank() ? null : s.trim();
   }
 }

@@ -3,6 +3,7 @@ package org.opentripplanner.graph_builder.module.transfer;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import javax.annotation.Nullable;
 import org.opentripplanner.core.model.id.FeedScopedId;
 import org.opentripplanner.datastore.api.DataSource;
 import org.opentripplanner.graph_builder.issue.api.DataImportIssueStore;
@@ -65,6 +66,26 @@ public class TransferLinksModule implements GraphBuilderModule {
         skipped++;
         continue;
       }
+      // Name guards catch id REASSIGNMENT: publishers like NJ Transit renumber stops between
+      // picks, silently re-pointing a curated link at an unrelated station. Loud skip beats
+      // silently wrong transfers.
+      String guardViolation = nameGuardViolation(row.from(), row.fromNameGuard());
+      if (guardViolation == null) {
+        guardViolation = nameGuardViolation(row.to(), row.toNameGuard());
+      }
+      if (guardViolation != null) {
+        issueStore.add(
+          Issue.issue(
+            "TransferLinkStopNameMismatch",
+            "Transfer link %s -> %s skipped: %s",
+            row.from(),
+            row.to(),
+            guardViolation
+          )
+        );
+        skipped++;
+        continue;
+      }
       for (var from : fromStops) {
         for (var to : toStops) {
           double distance = from.getCoordinate().distanceTo(to.getCoordinate());
@@ -87,6 +108,32 @@ public class TransferLinksModule implements GraphBuilderModule {
       rows.size(),
       skipped
     );
+  }
+
+  /**
+   * Returns a description of the violation if the endpoint's resolved name does not contain the
+   * guard (case-insensitive), or null when the guard passes or is absent.
+   */
+  @Nullable
+  private String nameGuardViolation(FeedScopedId id, @Nullable String guard) {
+    if (guard == null) {
+      return null;
+    }
+    var siteRepository = timetableRepository.getSiteRepository();
+    String name = null;
+    var stop = siteRepository.getRegularStop(id);
+    if (stop != null && stop.getName() != null) {
+      name = stop.getName().toString();
+    } else {
+      var station = siteRepository.getStationById(id);
+      if (station != null && station.getName() != null) {
+        name = station.getName().toString();
+      }
+    }
+    if (name == null || !name.toLowerCase().contains(guard.toLowerCase())) {
+      return "%s resolved to '%s' which does not match name guard '%s'".formatted(id, name, guard);
+    }
+    return null;
   }
 
   /**
