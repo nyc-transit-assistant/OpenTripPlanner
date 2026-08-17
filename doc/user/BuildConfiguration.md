@@ -42,6 +42,7 @@ Sections follow that describe particular settings in more depth.
 | stopConsolidationFile                                                                       |         `uri`        | Name of the CSV-formatted file in the build directory which contains the configuration for stop consolidation.                                                 | *Optional* |                                   |  2.5  |
 | [streetGraph](#streetGraph)                                                                 |         `uri`        | URI to the street graph object file for reading and writing.                                                                                                   | *Optional* |                                   |  2.0  |
 | [subwayAccessTime](#subwayAccessTime)                                                       |       `double`       | Minutes necessary to reach stops served by trips on routes of route_type=1 (subway) from the street.                                                           | *Optional* | `2.0`                             |  1.5  |
+| [transferLinksFile](#transferLinksFile)                                                     |         `uri`        | Name of the CSV-formatted file in the build directory which contains curated transfer links between feed-scoped stops.                                         | *Optional* |                                   |  2.9  |
 | [transitModelTimeZone](#transitModelTimeZone)                                               |      `time-zone`     | Time zone for the graph.                                                                                                                                       | *Optional* |                                   |  2.2  |
 | [transitServiceEnd](#transitServiceEnd)                                                     |      `duration`      | Limit the import of transit services to the given end date.                                                                                                    | *Optional* | `"P3Y"`                           |  2.0  |
 | [transitServiceStart](#transitServiceStart)                                                 |      `duration`      | Limit the import of transit services to the given START date.                                                                                                  | *Optional* | `"-P1Y"`                          |  2.0  |
@@ -597,6 +598,21 @@ This setting does not generalize to other modes like airplanes because you often
 to check in to a flight (2-3 hours for international flights) than to alight and exit the airport
 (perhaps 1 hour). Use [`boardSlackForMode`](RouteRequest.md#rd_boardSlackForMode) and
 [`alightSlackForMode`](RouteRequest.md#rd_alightSlackForMode) for this.
+
+
+<h3 id="transferLinksFile">transferLinksFile</h3>
+
+**Since version:** `2.9` ∙ **Type:** `uri` ∙ **Cardinality:** `Optional`   
+**Path:** / 
+
+Name of the CSV-formatted file in the build directory which contains curated transfer links between feed-scoped stops.
+
+The file is shaped like a GTFS transfers.txt, except `from_stop_id` and `to_stop_id` are
+feed-scoped ids (`feedId:stopId`) so a row can span datasets — cross-feed station-complex
+transfers that no single GTFS dataset can express. Only `transfer_type` 2 (minimum-time)
+is supported; `min_transfer_time` is the signposted walk time in seconds and the optional
+`wheelchair_min_transfer_time` column is the wheelchair time (empty = not accessible).
+Curated links replace street-generated walk transfers for their stop pair.
 
 
 <h3 id="transitModelTimeZone">transitModelTimeZone</h3>

@@ -50,6 +50,26 @@ public class DefaultTransferRepository implements TransferRepository {
   }
 
   @Override
+  public void replaceWalkTransfer(StopLocation from, StopLocation to, PathTransfer replacement) {
+    index.invalidate();
+    var existing = List.copyOf(transfersByStop.get(from));
+    for (PathTransfer t : existing) {
+      if (t.to.equals(to) && t.allowsMode(StreetMode.WALK)) {
+        transfersByStop.remove(from, t);
+        var remainingModes = t.getModes();
+        remainingModes.remove(StreetMode.WALK);
+        if (!remainingModes.isEmpty()) {
+          transfersByStop.put(
+            from,
+            new PathTransfer(t.from, t.to, t.getDistanceMeters(), t.getEdges(), remainingModes)
+          );
+        }
+      }
+    }
+    transfersByStop.put(from, replacement);
+  }
+
+  @Override
   public void index() {
     LOG.info("Transfer repository indexing...");
     index.index(this);

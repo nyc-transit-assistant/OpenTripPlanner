@@ -340,6 +340,28 @@ public class GraphBuilderModules {
   @Provides
   @Singleton
   @Nullable
+  static org.opentripplanner.graph_builder.module.transfer.TransferLinksModule providesTransferLinksModule(
+    TimetableRepository timetableRepository,
+    org.opentripplanner.transfer.regular.TransferRepository transferRepository,
+    DataImportIssueStore issueStore,
+    GraphBuilderDataSources dataSources
+  ) {
+    return dataSources
+      .transferLinks()
+      .map(ds ->
+        org.opentripplanner.graph_builder.module.transfer.TransferLinksModule.of(
+          timetableRepository,
+          transferRepository,
+          issueStore,
+          ds
+        )
+      )
+      .orElse(null);
+  }
+
+  @Provides
+  @Singleton
+  @Nullable
   static StopConsolidationModule providesStopConsolidationModule(
     TimetableRepository timetableRepository,
     @Nullable StopConsolidationRepository repo,

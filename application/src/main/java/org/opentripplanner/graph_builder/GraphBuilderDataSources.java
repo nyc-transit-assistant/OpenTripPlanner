@@ -149,6 +149,10 @@ public class GraphBuilderDataSources implements Closeable {
     return store.stopConsolidation();
   }
 
+  public Optional<DataSource> transferLinks() {
+    return store.transferLinks();
+  }
+
   public File getBaseDirectory() {
     return baseDirectory;
   }

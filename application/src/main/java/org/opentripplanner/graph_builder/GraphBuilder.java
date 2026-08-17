@@ -180,6 +180,10 @@ public class GraphBuilder implements Runnable {
       // This module will use streets or straight line distance depending on whether OSM data is found in the graph.
       graphBuilder.addModule(factory.directTransferGenerator());
 
+      // Curated transfer links override street-generated walk transfers for their stop pairs,
+      // so they must run after the direct transfer generator.
+      graphBuilder.addModuleOptional(factory.transferLinksModule());
+
       // Analyze routing between stops to generate report
       graphBuilder.addModuleOptional(factory.directTransferAnalyzer(), OTPFeature.TransferAnalyzer);
 

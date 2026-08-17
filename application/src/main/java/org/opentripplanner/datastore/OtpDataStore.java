@@ -63,6 +63,7 @@ public class OtpDataStore {
   private DataSource streetGraph;
   private DataSource graph;
   private DataSource stopConsolidation;
+  private DataSource transferLinks;
   private CompositeDataSource buildReportDir;
   private boolean opened = false;
 
@@ -119,6 +120,14 @@ public class OtpDataStore {
       );
     }
 
+    if (config.transferLinks() != null) {
+      transferLinks = findSingleSource(
+        config.transferLinks(),
+        config.transferLinks().toString(),
+        GTFS
+      );
+    }
+
     addAll(Arrays.asList(streetGraph, graph, buildReportDir));
 
     // Also read in unknown sources in case the data input source is miss-spelled,
@@ -165,6 +174,10 @@ public class OtpDataStore {
 
   public Optional<DataSource> stopConsolidation() {
     return Optional.ofNullable(stopConsolidation);
+  }
+
+  public Optional<DataSource> transferLinks() {
+    return Optional.ofNullable(transferLinks);
   }
 
   /**

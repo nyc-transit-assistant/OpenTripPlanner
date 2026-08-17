@@ -101,6 +101,9 @@ public interface GraphBuilderFactory {
   @Nullable
   StopConsolidationModule stopConsolidationModule();
 
+  @Nullable
+  org.opentripplanner.graph_builder.module.transfer.TransferLinksModule transferLinksModule();
+
   FareServiceFactory fareServiceFactory();
 
   VertexLinker vertexLinker();

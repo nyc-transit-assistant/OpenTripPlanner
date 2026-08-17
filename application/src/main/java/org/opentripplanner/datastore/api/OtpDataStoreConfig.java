@@ -84,6 +84,12 @@ public interface OtpDataStoreConfig {
   URI stopConsolidation();
 
   /**
+   * The URI to the curated transfer-links data source.
+   */
+  @Nullable
+  URI transferLinks();
+
+  /**
    *
    * A pattern to lookup local GTFS files
    */

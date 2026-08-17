@@ -188,6 +188,7 @@ public class BuildConfig implements OtpDataStoreConfig {
   public final ZoneId transitModelTimeZone;
   private final List<FeedScopedId> transitRouteToStationCentroid;
   public final URI stopConsolidation;
+  public final URI transferLinks;
   private final GsConfig gsConfig;
 
   /**
@@ -590,6 +591,24 @@ public class BuildConfig implements OtpDataStoreConfig {
       )
       .asUri(null);
 
+    transferLinks = root
+      .of("transferLinksFile")
+      .since(V2_9)
+      .summary(
+        "Name of the CSV-formatted file in the build directory which contains curated transfer links between feed-scoped stops."
+      )
+      .description(
+        """
+        The file is shaped like a GTFS transfers.txt, except `from_stop_id` and `to_stop_id` are
+        feed-scoped ids (`feedId:stopId`) so a row can span datasets — cross-feed station-complex
+        transfers that no single GTFS dataset can express. Only `transfer_type` 2 (minimum-time)
+        is supported; `min_transfer_time` is the signposted walk time in seconds and the optional
+        `wheelchair_min_transfer_time` column is the wheelchair time (empty = not accessible).
+        Curated links replace street-generated walk transfers for their stop pair.
+        """
+      )
+      .asUri(null);
+
     osmDefaults = OsmConfig.mapOsmDefaults(root, "osmDefaults");
     osm = OsmConfig.mapOsmConfig(root, "osm", osmDefaults);
     demDefaults = DemConfig.mapDemDefaultsConfig(root, "demDefaults");
@@ -682,6 +701,12 @@ public class BuildConfig implements OtpDataStoreConfig {
   @Nullable
   public URI stopConsolidation() {
     return stopConsolidation;
+  }
+
+  @Override
+  @Nullable
+  public URI transferLinks() {
+    return transferLinks;
   }
 
   @Override

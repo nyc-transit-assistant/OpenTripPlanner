@@ -31,6 +31,14 @@ public interface TransferRepository extends Serializable {
   void addAllTransfersByStops(Multimap<StopLocation, PathTransfer> transfersByStop);
 
   /**
+   * Replace any existing WALK transfers between the given stops with the given transfer. Existing
+   * transfers that also carry other modes keep those modes but lose WALK. Used by curated transfer
+   * links, which are authoritative over street-generated walk transfers for their stop pair.
+   * Invalidates the index; call {@link #index()} after the last mutation.
+   */
+  void replaceWalkTransfer(StopLocation from, StopLocation to, PathTransfer replacement);
+
+  /**
    * Initialize the index.
    */
   void index();
