@@ -862,6 +862,32 @@ public abstract class OsmEntity {
   }
 
   /**
+   * Is this element mapped below street level — an underground location, a true tunnel, or a
+   * negative {@code level}? Station concourses, underground platform areas and their connecting
+   * steps match; ways under bridges (negative {@code layer} alone) and building passages do not.
+   * Multi-value levels like {@code -1;0} count as below street level: an element spanning down
+   * from the surface is a descent, not a place a 2D-linked coordinate should snap to.
+   */
+  public boolean isBelowStreetLevel() {
+    if (isTag("location", "underground") || isTagTrue("tunnel")) {
+      return true;
+    }
+    String level = getTag("level");
+    if (level != null) {
+      for (String part : level.split("[;,]")) {
+        try {
+          if (Double.parseDouble(part.trim()) < 0) {
+            return true;
+          }
+        } catch (NumberFormatException ignored) {
+          // non-numeric level values carry no height information
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Is this a link to another road, like a highway ramp.
    */
   public boolean isLink() {

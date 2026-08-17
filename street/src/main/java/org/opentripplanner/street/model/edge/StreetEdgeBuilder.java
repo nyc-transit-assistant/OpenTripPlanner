@@ -1,6 +1,7 @@
 package org.opentripplanner.street.model.edge;
 
 import static org.opentripplanner.street.model.edge.StreetEdge.BACK_FLAG_INDEX;
+import static org.opentripplanner.street.model.edge.StreetEdge.BELOW_STREET_LEVEL_FLAG_INDEX;
 import static org.opentripplanner.street.model.edge.StreetEdge.BICYCLE_NOTHRUTRAFFIC;
 import static org.opentripplanner.street.model.edge.StreetEdge.CLASS_LINK;
 import static org.opentripplanner.street.model.edge.StreetEdge.CROSSING_FLAG_INDEX;
@@ -202,6 +203,11 @@ public class StreetEdgeBuilder<B extends StreetEdgeBuilder<B>> {
 
   public B withCrossing(boolean crossing) {
     flags = BitSetUtils.set(flags, CROSSING_FLAG_INDEX, crossing);
+    return instance();
+  }
+
+  public B withBelowStreetLevel(boolean belowStreetLevel) {
+    flags = BitSetUtils.set(flags, BELOW_STREET_LEVEL_FLAG_INDEX, belowStreetLevel);
     return instance();
   }
 

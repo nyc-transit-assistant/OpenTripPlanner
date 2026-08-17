@@ -298,6 +298,23 @@ public class VertexLinker {
       .filter(ead -> ead.squaredDistanceDegreesLat < radiusDegSq)
       .toList();
 
+    // Request coordinates carry no elevation, so 2D snapping must not drop them onto
+    // infrastructure mapped below street level (station concourses, underground platform areas,
+    // tunnels) that merely lies beneath the point — those networks are reachable only through
+    // entrances elsewhere, and linking into them strands the request in a subnetwork the street
+    // graph cannot walk out of. Prefer surface edges whenever any are in range; keep underground
+    // edges as the fallback so deliberately underground linking still works. Build-time linking
+    // (PERMANENT) is exempt: stops and entrances legitimately live below street level.
+    if (scope != Scope.PERMANENT) {
+      var surface = candidateDistanceToEdges
+        .stream()
+        .filter(ead -> !ead.item.isBelowStreetLevel())
+        .toList();
+      if (!surface.isEmpty()) {
+        candidateDistanceToEdges = surface;
+      }
+    }
+
     return linkToCandidateEdges(
       vertex,
       traverseModes,

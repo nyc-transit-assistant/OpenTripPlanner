@@ -741,6 +741,7 @@ public class OsmModule implements GraphBuilderModule {
       .withCrossing(way.isCrossing())
       .withSlopeOverride(way.getOsmProvider().getWayPropertySet().getSlopeOverride(way))
       .withStairs(way.isStairs())
+      .withBelowStreetLevel(way.isBelowStreetLevel())
       .withWheelchairAccessible(way.isWheelchairAccessible())
       .withBogusName(way.hasNoName());
 

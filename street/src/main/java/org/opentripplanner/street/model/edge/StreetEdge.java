@@ -60,6 +60,7 @@ public class StreetEdge
   static final int WALK_NOTHRUTRAFFIC = 8;
   static final int CLASS_LINK = 9;
   static final int CROSSING_FLAG_INDEX = 10;
+  static final int BELOW_STREET_LEVEL_FLAG_INDEX = 11;
 
   private StreetEdgeCostExtension costExtension;
 
@@ -301,6 +302,16 @@ public class StreetEdge
 
   public boolean isCrossing() {
     return BitSetUtils.get(flags, CROSSING_FLAG_INDEX);
+  }
+
+  /**
+   * True if this edge was built from OSM infrastructure mapped below street level (underground
+   * location, tunnel, or negative level) — station concourses, platform areas, connecting steps.
+   * The linker uses this to keep 2D-linked request coordinates from snapping onto networks that
+   * lie beneath the point but are only reachable through entrances elsewhere.
+   */
+  public boolean isBelowStreetLevel() {
+    return BitSetUtils.get(flags, BELOW_STREET_LEVEL_FLAG_INDEX);
   }
 
   @Override

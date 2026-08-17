@@ -623,6 +623,7 @@ class WalkableAreaBuilder {
     WayProperties wayData = null;
     StreetTraversalPermission areaPermissions = StreetTraversalPermission.ALL;
     boolean wheelchairAccessible = true;
+    boolean belowStreetLevel = false;
 
     // combine properties of intersected areas
     for (OsmArea area : areas) {
@@ -633,6 +634,7 @@ class WalkableAreaBuilder {
         wayData = findAreaProperties(parent);
         areaPermissions = areaPermissions.intersection(wayData.getPermission());
         wheelchairAccessible = wheelchairAccessible && parent.isWheelchairAccessible();
+        belowStreetLevel = belowStreetLevel || parent.isBelowStreetLevel();
       }
     }
     if (parent == null) {
@@ -661,6 +663,7 @@ class WalkableAreaBuilder {
       .withCarSpeed(carSpeed)
       .withBogusName(parent.hasNoName())
       .withWheelchairAccessible(wheelchairAccessible)
+      .withBelowStreetLevel(belowStreetLevel)
       .withLink(parent.isLink());
 
     var backwardName = namer
@@ -678,6 +681,7 @@ class WalkableAreaBuilder {
       .withCarSpeed(carSpeed)
       .withBogusName(parent.hasNoName())
       .withWheelchairAccessible(wheelchairAccessible)
+      .withBelowStreetLevel(belowStreetLevel)
       .withLink(parent.isLink());
 
     AreaEdge street = streetEdgeBuilder.buildAndConnect();
