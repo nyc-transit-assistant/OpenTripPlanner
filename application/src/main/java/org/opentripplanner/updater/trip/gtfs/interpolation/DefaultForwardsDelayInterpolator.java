@@ -253,6 +253,13 @@ class DefaultForwardsDelayInterpolator implements ForwardsDelayInterpolator {
     if (repairs > 0) {
       LOG.debug("Clamped {} non-monotonic stop time(s) on trip {}", repairs, builder.getTrip());
     }
+    if (repairs > 0) {
+      // Sizes CLAMP_CONTRADICTIONS activity (issue #7). No feed context down here; the mode
+      // is only enabled on the subway updaters, so the untagged total is effectively subway.
+      io.micrometer.core.instrument.Metrics.counter("trip.updates.diag.clamp_repairs").increment(
+        repairs
+      );
+    }
     return repairs > 0;
   }
 

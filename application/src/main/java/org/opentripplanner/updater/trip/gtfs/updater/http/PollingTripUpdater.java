@@ -12,6 +12,7 @@ import org.opentripplanner.updater.trip.gtfs.interpolation.BackwardsDelayPropaga
 import org.opentripplanner.updater.trip.gtfs.interpolation.ForwardsDelayPropagationType;
 import org.opentripplanner.updater.trip.gtfs.updater.TripUpdateGraphWriterRunnable;
 import org.opentripplanner.updater.trip.metrics.BatchTripUpdateMetrics;
+import org.opentripplanner.updater.trip.metrics.TripUpdateMetrics;
 import org.opentripplanner.utils.tostring.ToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,7 @@ public class PollingTripUpdater extends PollingGraphUpdater {
    */
   private final BackwardsDelayPropagationType backwardsDelayPropagationType;
   private final Consumer<UpdateResult> recordMetrics;
+  private final Consumer<Throwable> recordCrash;
 
   /**
    * Set only if we should attempt to match the trip_id from other data in TripDescriptor
@@ -80,7 +82,9 @@ public class PollingTripUpdater extends PollingGraphUpdater {
     this.trainNumberSynthesisIdPrefix = parameters.trainNumberSynthesisIdPrefix();
     this.trainNumberSynthesisRouteId = parameters.trainNumberSynthesisRouteId();
 
-    this.recordMetrics = BatchTripUpdateMetrics.batch(parameters);
+    var batchMetrics = BatchTripUpdateMetrics.createBatch(parameters);
+    this.recordMetrics = batchMetrics != null ? batchMetrics::setGauges : TripUpdateMetrics.NOOP;
+    this.recordCrash = batchMetrics != null ? batchMetrics::recordCrash : ignored -> {};
 
     LOG.info("Creating stop time updater running every {} : {}", pollingPeriod(), updateSource);
   }
@@ -111,7 +115,8 @@ public class PollingTripUpdater extends PollingGraphUpdater {
         updateSource.tripReplacementPeriodsOfLastUpdates(),
         scopedFullDatasetClear,
         feedIds,
-        recordMetrics
+        recordMetrics,
+        recordCrash
       );
       updateGraph(runnable);
     }

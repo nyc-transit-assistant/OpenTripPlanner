@@ -4,6 +4,7 @@ import static org.opentripplanner.updater.spi.UpdateErrorType.NOT_IMPLEMENTED_UN
 import static org.opentripplanner.updater.trip.UpdateIncrementality.FULL_DATASET;
 
 import com.google.transit.realtime.GtfsRealtime;
+import io.micrometer.core.instrument.Metrics;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -467,6 +468,47 @@ public class GtfsRealTimeUpdateHandler {
         "[feedIds={}] unresolved RT trips on routes not covered by any active replacement period: {}",
         feedIds,
         unresolvedUncoveredRouteIds
+      );
+    }
+
+    // Promote the per-batch diagnostics above from log lines to Micrometer counters
+    // (issue #7): a shift in any of these is usually the first sign of an upstream feed
+    // behavior change, and log-only counters are invisible to dashboards and alerts.
+    String feedTag = String.join("+", feedIds);
+    diagCount(feedTag, "stripped_empty_stop_time_events", strippedEmptyStopTimeEvents);
+    diagCount(feedTag, "skipped_informationless_updates", skippedInformationlessUpdates);
+    diagCount(feedTag, "discarded_date_mismatched_resolutions", discardedDateMismatchedResolutions);
+    diagCount(feedTag, "reanchored_start_dates", reanchoredStartDates);
+    diagCount(feedTag, "partial_trip_id_matches", partialTripIdMatches);
+    diagCount(feedTag, "train_number_matches", trainNumberMatches);
+    diagCount(feedTag, "cancelled_by_omission", cancelledByOmission);
+    diagCount(feedTag, "converted_scheduled_to_added", convertedScheduledToAdded);
+    diagCount(
+      feedTag,
+      "converted_scheduled_to_added_pattern_diverged",
+      convertedScheduledToAddedDueToPatternDivergence
+    );
+    if (trainNumberTripMatcher != null) {
+      diagCount(feedTag, "matcher_synthesized", trainNumberTripMatcher.synthesizedCount);
+      diagCount(feedTag, "matcher_ambiguous", trainNumberTripMatcher.ambiguousCount);
+      diagCount(feedTag, "matcher_no_candidates", trainNumberTripMatcher.noCandidatesCount);
+      diagCount(
+        feedTag,
+        "matcher_candidates_no_active_service",
+        trainNumberTripMatcher.candidatesButNoActiveServiceCount
+      );
+    }
+    if (partialTripIdMatcher != null) {
+      diagCount(feedTag, "partial_matcher_no_candidates", partialTripIdMatcher.noCandidatesCount);
+      diagCount(
+        feedTag,
+        "partial_matcher_candidates_no_active_service",
+        partialTripIdMatcher.candidatesButNoActiveServiceCount
+      );
+      diagCount(
+        feedTag,
+        "partial_matcher_route_not_found",
+        partialTripIdMatcher.routeNotFoundCount
       );
     }
     return updateResult;
@@ -981,5 +1023,15 @@ public class GtfsRealTimeUpdateHandler {
     builder.clearStopTimeUpdate();
     builder.addAllStopTimeUpdate(cleaned);
     return builder.build();
+  }
+
+  /**
+   * Cumulative per-feed diagnostic counter (prometheus: {@code trip_updates_diag_<name>_total}).
+   * Micrometer caches meter instances by name+tags, so calling through here per batch is cheap.
+   */
+  private static void diagCount(String feedTag, String name, int amount) {
+    if (amount > 0) {
+      Metrics.counter("trip.updates.diag." + name, "feedId", feedTag).increment(amount);
+    }
   }
 }

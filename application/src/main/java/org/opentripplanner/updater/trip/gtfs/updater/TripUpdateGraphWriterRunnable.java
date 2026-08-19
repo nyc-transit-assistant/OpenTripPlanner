@@ -43,6 +43,14 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
   private final List<String> feedIds;
   private final boolean scopedFullDatasetClear;
   private final Consumer<UpdateResult> sendMetrics;
+
+  /**
+   * Invoked when the apply pass throws before producing a result — without it the metrics
+   * consumer never runs for the failed poll and every gauge silently keeps its previous
+   * value (the gauge-freeze blind spot). The throwable is re-thrown after recording.
+   */
+  private final Consumer<Throwable> sendCrash;
+
   private final GtfsRealTimeTripUpdateAdapter adapter;
 
   public TripUpdateGraphWriterRunnable(
@@ -61,6 +69,42 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     List<String> feedIds,
     Consumer<UpdateResult> sendMetrics
   ) {
+    this(
+      adapter,
+      fuzzyTripMatching,
+      partialTripIdMatching,
+      trainNumberMatching,
+      trainNumberSynthesisIdPrefix,
+      trainNumberSynthesisRouteId,
+      forwardsDelayPropagationType,
+      backwardsDelayPropagationType,
+      updateIncrementality,
+      updates,
+      tripReplacementPeriods,
+      scopedFullDatasetClear,
+      feedIds,
+      sendMetrics,
+      ignored -> {}
+    );
+  }
+
+  public TripUpdateGraphWriterRunnable(
+    GtfsRealTimeTripUpdateAdapter adapter,
+    boolean fuzzyTripMatching,
+    boolean partialTripIdMatching,
+    boolean trainNumberMatching,
+    String trainNumberSynthesisIdPrefix,
+    String trainNumberSynthesisRouteId,
+    ForwardsDelayPropagationType forwardsDelayPropagationType,
+    BackwardsDelayPropagationType backwardsDelayPropagationType,
+    UpdateIncrementality updateIncrementality,
+    List<TripUpdate> updates,
+    List<TripReplacementPeriod> tripReplacementPeriods,
+    boolean scopedFullDatasetClear,
+    List<String> feedIds,
+    Consumer<UpdateResult> sendMetrics,
+    Consumer<Throwable> sendCrash
+  ) {
     this.adapter = adapter;
     this.fuzzyTripMatching = fuzzyTripMatching;
     this.partialTripIdMatching = partialTripIdMatching;
@@ -78,6 +122,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
       throw new IllegalArgumentException("feedIds must contain at least one feedId");
     }
     this.sendMetrics = sendMetrics;
+    this.sendCrash = Objects.requireNonNull(sendCrash);
   }
 
   @Override
@@ -96,20 +141,26 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
             : null
         )
       : null;
-    var result = adapter
-      .forUpdate(context.mutableSnapshot())
-      .applyTripUpdates(
-        fuzzyTripMatching ? context.gtfsRealtimeFuzzyTripMatcher() : null,
-        partialMatcher,
-        trainNumberMatcher,
-        forwardsDelayPropagationType,
-        backwardsDelayPropagationType,
-        updateIncrementality,
-        updates,
-        tripReplacementPeriods,
-        scopedFullDatasetClear,
-        feedIds
-      );
+    final UpdateResult result;
+    try {
+      result = adapter
+        .forUpdate(context.mutableSnapshot())
+        .applyTripUpdates(
+          fuzzyTripMatching ? context.gtfsRealtimeFuzzyTripMatcher() : null,
+          partialMatcher,
+          trainNumberMatcher,
+          forwardsDelayPropagationType,
+          backwardsDelayPropagationType,
+          updateIncrementality,
+          updates,
+          tripReplacementPeriods,
+          scopedFullDatasetClear,
+          feedIds
+        );
+    } catch (RuntimeException | Error e) {
+      sendCrash.accept(e);
+      throw e;
+    }
     sendMetrics.accept(result);
   }
 }
