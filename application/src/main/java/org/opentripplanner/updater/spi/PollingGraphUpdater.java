@@ -1,9 +1,15 @@
 package org.opentripplanner.updater.spi;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Tags;
+import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.opentripplanner.framework.application.OTPFeature;
 import org.opentripplanner.updater.GraphWriterRunnable;
@@ -53,10 +59,65 @@ public abstract class PollingGraphUpdater implements GraphUpdater {
   @Nullable
   private volatile Future<?> previousTask;
 
+  /**
+   * Poll-level liveness metrics, shared by EVERY polling updater — trip updates, vehicle
+   * positions, alerts, equipment status, vehicle rental. Success here means runPolling
+   * completed (fetched, parsed, and enqueued its graph write); apply-level detail for trip
+   * updates stays in the richer batch_trip_updates_* meters. This is what makes non-TU feed
+   * health observable at all: their failures were previously only a swallowed log line in
+   * {@link #run}.
+   */
+  private Counter pollAttempts;
+  private Counter pollFailures;
+  private final AtomicLong pollLastSuccessEpoch = new AtomicLong(0);
+  private final AtomicLong pollLastAttemptEpoch = new AtomicLong(0);
+
   /** Shared configuration code for all polling graph updaters. */
   protected PollingGraphUpdater(PollingGraphUpdaterParameters config) {
     this.pollingPeriod = config.frequency();
     this.configRef = config.configRef();
+    if (org.opentripplanner.framework.application.OTPFeature.ActuatorAPI.isOn()) {
+      var tags = Tags.of(
+        "configRef",
+        configRef == null ? "" : configRef,
+        "updater",
+        updaterLabel(config.metricsUrl()),
+        "type",
+        getClass().getSimpleName()
+      );
+      this.pollAttempts = Counter.builder("updater.poll.attempts")
+        .description("Polling cycles run, successful or not")
+        .tags(tags)
+        .register(Metrics.globalRegistry);
+      this.pollFailures = Counter.builder("updater.poll.failures")
+        .description("Polling cycles that threw (fetch, parse, or enqueue)")
+        .tags(tags)
+        .register(Metrics.globalRegistry);
+      Gauge.builder("updater.poll.last_success_epoch", pollLastSuccessEpoch::get)
+        .description("Epoch seconds of the last polling cycle that completed")
+        .tags(tags)
+        .register(Metrics.globalRegistry);
+      Gauge.builder("updater.poll.last_attempt_epoch", pollLastAttemptEpoch::get)
+        .description("Epoch seconds of the last polling cycle, successful or not")
+        .tags(tags)
+        .register(Metrics.globalRegistry);
+    }
+  }
+
+  /** The URL path identifies the endpoint regardless of host; falls back to the raw value. */
+  private String updaterLabel(String url) {
+    if (url == null || url.isBlank()) {
+      return configRef == null ? "" : configRef;
+    }
+    try {
+      String path = URI.create(url).getPath();
+      if (path != null && !path.isBlank()) {
+        return path.startsWith("/") ? path.substring(1) : path;
+      }
+    } catch (IllegalArgumentException ignored) {
+      // fall through
+    }
+    return url;
   }
 
   public Duration pollingPeriod() {
@@ -71,7 +132,12 @@ public abstract class PollingGraphUpdater implements GraphUpdater {
       }
 
       // Run concrete polling graph updater's implementation method.
+      pollLastAttemptEpoch.set(System.currentTimeMillis() / 1000);
+      if (pollAttempts != null) {
+        pollAttempts.increment();
+      }
       runPolling();
+      pollLastSuccessEpoch.set(System.currentTimeMillis() / 1000);
       if (runOnlyOnce()) {
         LOG.info(
           "As requested in configuration, updater {} has run only once and will now stop.",
@@ -87,6 +153,9 @@ public abstract class PollingGraphUpdater implements GraphUpdater {
     } catch (CancellationException e) {
       LOG.info("OTP is shutting down, the polling updater {} was interrupted", this, e);
     } catch (Exception e) {
+      if (pollFailures != null) {
+        pollFailures.increment();
+      }
       LOG.error("Error while running polling updater {}", this, e);
       // TODO Should we cancel the task? Or after n consecutive failures? cancel();
     } finally {

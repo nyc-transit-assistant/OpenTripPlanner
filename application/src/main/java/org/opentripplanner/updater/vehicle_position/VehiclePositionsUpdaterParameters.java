@@ -22,6 +22,11 @@ public record VehiclePositionsUpdaterParameters(
   @Nullable String trainNumberSynthesisRouteId,
   Set<VehiclePositionsUpdaterConfig.VehiclePositionFeature> vehiclePositionFeatures
 ) implements PollingGraphUpdaterParameters {
+  @Override
+  public String metricsUrl() {
+    return url.toString();
+  }
+
   public VehiclePositionsUpdaterParameters {
     Objects.requireNonNull(feedIds, "feedIds is required");
     if (feedIds.isEmpty()) {

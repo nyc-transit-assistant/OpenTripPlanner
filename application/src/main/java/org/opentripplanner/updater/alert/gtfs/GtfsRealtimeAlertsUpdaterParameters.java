@@ -15,6 +15,11 @@ public record GtfsRealtimeAlertsUpdaterParameters(
   Duration frequency,
   HttpHeaders headers
 ) implements PollingGraphUpdaterParameters {
+  @Override
+  public String metricsUrl() {
+    return url;
+  }
+
   public GtfsRealtimeAlertsUpdaterParameters {
     Objects.requireNonNull(feedIds, "feedIds is required");
     if (feedIds.isEmpty()) {

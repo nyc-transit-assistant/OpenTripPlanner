@@ -15,4 +15,9 @@ public record MtaEquipmentStatusUpdaterParameters(
   Duration frequency,
   Duration staleAfter,
   HttpHeaders headers
-) implements PollingGraphUpdaterParameters {}
+) implements PollingGraphUpdaterParameters {
+  @Override
+  public String metricsUrl() {
+    return url;
+  }
+}
