@@ -70,7 +70,7 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
     if (omnyLegs.isEmpty()) {
       return result;
     }
-    for (FeedScopedId category : riderCategories(omnyLegs, stockProducts)) {
+    for (String category : riderCategories(omnyLegs, stockProducts)) {
       composeChain(omnyLegs, stockProducts, category, result);
     }
     return result;
@@ -78,13 +78,15 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
 
   /**
    * Rider category ids present on the OMNY legs' base products; a single null element when the
-   * fare data carries no categories at all.
+   * fare data carries no categories at all. Each feed scopes its own rider categories
+   * (mta-subway:adult vs mta-bus-company:adult name the same rider), so categories are keyed by
+   * their local id — the OMNY feeds deliberately author matching local ids.
    */
-  private Set<FeedScopedId> riderCategories(
+  private Set<String> riderCategories(
     List<TransitLeg> legs,
     Multimap<Leg, FareOffer> stockProducts
   ) {
-    var categories = new LinkedHashSet<FeedScopedId>();
+    var categories = new LinkedHashSet<String>();
     var uncategorized = false;
     for (TransitLeg leg : legs) {
       for (FareOffer offer : stockProducts.get(leg)) {
@@ -92,7 +94,7 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
         if (category == null) {
           uncategorized = true;
         } else {
-          categories.add(category.id());
+          categories.add(category.id().getId());
         }
       }
     }
@@ -110,7 +112,7 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
   private void composeChain(
     List<TransitLeg> legs,
     Multimap<Leg, FareOffer> stockProducts,
-    @Nullable FeedScopedId category,
+    @Nullable String category,
     ItineraryFare result
   ) {
     ZonedDateTime windowStart = null;
@@ -172,12 +174,14 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
   }
 
   @Nullable
-  private FareProduct baseProduct(Collection<FareOffer> offers, @Nullable FeedScopedId category) {
+  private FareProduct baseProduct(Collection<FareOffer> offers, @Nullable String category) {
     return offers
       .stream()
       .filter(o -> o instanceof FareOffer.DefaultFareOffer)
       .map(FareOffer::fareProduct)
-      .filter(p -> Objects.equals(p.category() == null ? null : p.category().id(), category))
+      .filter(p ->
+        Objects.equals(p.category() == null ? null : p.category().id().getId(), category)
+      )
       .min(Comparator.comparing(FareProduct::price))
       .orElse(null);
   }

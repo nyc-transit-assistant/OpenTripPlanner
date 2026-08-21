@@ -47,11 +47,34 @@ class NycFaresServiceTest {
     .withName("Reduced Fare")
     .build();
 
+  // real feeds each scope their own rider categories: the bus feed's "adult" is a different
+  // FeedScopedId than the subway feed's — the service must match them by local id
+  private static final RiderCategory BUS_ADULT_CAT = RiderCategory.of(
+    new FeedScopedId(BUS, "adult")
+  )
+    .withName("Adult")
+    .build();
+  private static final RiderCategory BUS_REDUCED_CAT = RiderCategory.of(
+    new FeedScopedId(BUS, "reduced")
+  )
+    .withName("Reduced Fare")
+    .build();
+
   private static final FareProduct SUBWAY_ADULT = product(SUBWAY, "local_single", 3.00f, ADULT);
   private static final FareProduct SUBWAY_REDUCED = product(SUBWAY, "local_single", 1.50f, REDUCED);
-  private static final FareProduct BUS_ADULT = product(BUS, "local_single", 3.00f, ADULT);
-  private static final FareProduct BUS_REDUCED = product(BUS, "local_single", 1.50f, REDUCED);
-  private static final FareProduct EXPRESS_ADULT = product(BUS, "express_single", 7.25f, ADULT);
+  private static final FareProduct BUS_ADULT = product(BUS, "local_single", 3.00f, BUS_ADULT_CAT);
+  private static final FareProduct BUS_REDUCED = product(
+    BUS,
+    "local_single",
+    1.50f,
+    BUS_REDUCED_CAT
+  );
+  private static final FareProduct EXPRESS_ADULT = product(
+    BUS,
+    "express_single",
+    7.25f,
+    BUS_ADULT_CAT
+  );
   private static final FareProduct PATH_SINGLE = product(PATH, "single", 3.25f, null);
 
   private static final FeedScopedId EXPRESS_NETWORK = new FeedScopedId(BUS, "express");
@@ -234,8 +257,8 @@ class NycFaresServiceTest {
       .stream()
       .filter(o ->
         Objects.equals(
-          o.fareProduct().category() == null ? null : o.fareProduct().category().id(),
-          category == null ? null : category.id()
+          o.fareProduct().category() == null ? null : o.fareProduct().category().id().getId(),
+          category == null ? null : category.id().getId()
         )
       )
       .toList();
