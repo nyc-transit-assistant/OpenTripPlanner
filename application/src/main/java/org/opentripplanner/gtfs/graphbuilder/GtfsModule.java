@@ -215,6 +215,18 @@ public class GtfsModule implements GraphBuilderModule {
         }
 
         fareServiceFactory.processGtfs(fareRulesData);
+        if (
+          fareServiceFactory instanceof
+            org.opentripplanner.routing.fares.PeakTripAwareFareServiceFactory peakAware
+        ) {
+          var peakTripIds =
+            org.opentripplanner.graph_builder.module.PeakTripsReader.readPeakTripIds(
+              gtfsBundle.getCsvInputSource()
+            );
+          if (!peakTripIds.isEmpty()) {
+            peakAware.addPeakTrips(feedId, peakTripIds);
+          }
+        }
       }
     } catch (IOException e) {
       throw new RuntimeException(e);

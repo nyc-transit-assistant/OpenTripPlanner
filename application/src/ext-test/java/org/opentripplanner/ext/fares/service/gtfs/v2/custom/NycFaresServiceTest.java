@@ -12,6 +12,7 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.annotation.Nullable;
@@ -317,6 +318,147 @@ class NycFaresServiceTest {
     var offPeakFare = peakService.calculateFares(offPeak);
     var offPeakReduced = offer(offPeakFare, offPeak.listTransitLegs().get(0), REDUCED);
     assertEquals(Money.usDollars(3.60f), offPeakReduced.fareProduct().price());
+  }
+
+  // --- railroad (zone / O-D) composition ---
+
+  private static final String LIRR = "mta-lirr";
+  private static final RiderCategory LIRR_ADULT = RiderCategory.of(new FeedScopedId(LIRR, "adult"))
+    .withName("Adult")
+    .build();
+  private static final RiderCategory LIRR_REDUCED = RiderCategory.of(
+    new FeedScopedId(LIRR, "reduced")
+  )
+    .withName("Reduced Fare")
+    .build();
+
+  private static final RegularStop PENN = stop(LIRR, "PEN", null);
+  private static final RegularStop JAMAICA = stop(LIRR, "JAM", null);
+  private static final RegularStop RONKONKOMA = stop(LIRR, "RONK", null);
+  private static final RegularStop FAR_ROCKAWAY = stop(LIRR, "FRK", null);
+  private static final Route LIRR_ROUTE = route(LIRR, "Ronkonkoma", TransitMode.RAIL, null);
+
+  private static FeedScopedId lirrArea(String id) {
+    return new FeedScopedId(LIRR, id);
+  }
+
+  private static FareProduct lirrProduct(String id, float amount, RiderCategory category) {
+    return FareProduct.of(new FeedScopedId(LIRR, id), id, Money.usDollars(amount))
+      .withCategory(category)
+      .build();
+  }
+
+  private static NycFaresService railroadService(Set<String> peakTrips) {
+    var rules = List.of(
+      FareLegRule.of(
+        new FeedScopedId(LIRR, "r_z10_z1"),
+        List.of(
+          lirrProduct("z10_z1_peak", 21.50f, LIRR_ADULT),
+          lirrProduct("z10_z1_offpeak", 16.00f, LIRR_ADULT),
+          lirrProduct("z10_z1_reduced", 10.75f, LIRR_REDUCED)
+        )
+      )
+        .withLegGroupId(new FeedScopedId(LIRR, "od"))
+        .withFromAreaId(lirrArea("zone_10"))
+        .withToAreaId(lirrArea("zone_1"))
+        .build(),
+      FareLegRule.of(
+        new FeedScopedId(LIRR, "r_z4_z1"),
+        List.of(lirrProduct("z4_z1_peak", 13.50f, LIRR_ADULT))
+      )
+        .withLegGroupId(new FeedScopedId(LIRR, "od"))
+        .withFromAreaId(lirrArea("zone_4"))
+        .withToAreaId(lirrArea("zone_1"))
+        .build(),
+      FareLegRule.of(
+        new FeedScopedId(LIRR, "r_fr_z1"),
+        List.of(lirrProduct("fr_z1_peak", 7.25f, LIRR_ADULT))
+      )
+        .withLegGroupId(new FeedScopedId(LIRR, "od"))
+        .withFromAreaId(lirrArea("far_rock"))
+        .withToAreaId(lirrArea("zone_1"))
+        .build()
+    );
+    var stopAreas = com.google.common.collect.ImmutableMultimap.<
+        FeedScopedId,
+        FeedScopedId
+      >builder()
+      .put(PENN.getId(), lirrArea("zone_1"))
+      .put(JAMAICA.getId(), lirrArea("zone_3"))
+      .put(RONKONKOMA.getId(), lirrArea("zone_10"))
+      .put(FAR_ROCKAWAY.getId(), lirrArea("zone_4"))
+      .put(FAR_ROCKAWAY.getId(), lirrArea("far_rock"))
+      .build();
+    var tables = RailroadFareTables.of(Set.of(LIRR), rules, stopAreas);
+    return new NycFaresService(
+      stockService(),
+      new NycFareParams(
+        SUBWAY,
+        Set.of(SUBWAY, BUS),
+        Set.of(),
+        Duration.ofMinutes(120),
+        null,
+        Set.of(LIRR)
+      ),
+      tables,
+      Map.of(LIRR, peakTrips)
+    );
+  }
+
+  @Test
+  void joinedRailroadRunIsOneEndToEndFare() {
+    var service = railroadService(Set.of("t1"));
+    var itinerary = newItinerary(Place.forStop(RONKONKOMA), 0)
+      .transit(LIRR_ROUTE, "t1", 0, 1800, 5, 7, Place.forStop(JAMAICA), null, null, null)
+      .transit(LIRR_ROUTE, "t2", 2100, 3600, 5, 7, Place.forStop(PENN), null, null, null)
+      .build();
+    var fare = service.calculateFares(itinerary);
+    var legs = itinerary.listTransitLegs();
+    var first = offer(fare, legs.get(0), LIRR_ADULT);
+    var second = offer(fare, legs.get(1), LIRR_ADULT);
+    assertEquals(first.uniqueId(), second.uniqueId());
+    assertEquals(Money.usDollars(21.50f), first.fareProduct().price());
+    // reduced fare has no peak variant: same product either way
+    assertEquals(
+      Money.usDollars(10.75f),
+      offer(fare, legs.get(0), LIRR_REDUCED).fareProduct().price()
+    );
+  }
+
+  @Test
+  void offPeakRailroadRunUsesOffPeakProduct() {
+    var service = railroadService(Set.of());
+    var itinerary = newItinerary(Place.forStop(RONKONKOMA), 0)
+      .transit(LIRR_ROUTE, "t1", 0, 1800, 5, 7, Place.forStop(JAMAICA), null, null, null)
+      .transit(LIRR_ROUTE, "t2", 2100, 3600, 5, 7, Place.forStop(PENN), null, null, null)
+      .build();
+    var fare = service.calculateFares(itinerary);
+    var adult = offer(fare, itinerary.listTransitLegs().get(0), LIRR_ADULT);
+    assertEquals(Money.usDollars(16.00f), adult.fareProduct().price());
+  }
+
+  @Test
+  void overlappingAreasPickTheCheapestTicket() {
+    // Far Rockaway sits in zone 4 AND the Far Rockaway Ticket area: rider buys the $7.25 ticket
+    var service = railroadService(Set.of("t1"));
+    var itinerary = newItinerary(Place.forStop(FAR_ROCKAWAY), 0)
+      .transit(LIRR_ROUTE, "t1", 0, 1800, 5, 7, Place.forStop(PENN), null, null, null)
+      .build();
+    var fare = service.calculateFares(itinerary);
+    var adult = offer(fare, itinerary.listTransitLegs().get(0), LIRR_ADULT);
+    assertEquals(Money.usDollars(7.25f), adult.fareProduct().price());
+  }
+
+  @Test
+  void unpricedRailroadPairFallsBackToStockOffers() {
+    // Jamaica -> Ronkonkoma has no authored rule in this fixture: the composer leaves the legs
+    // to the stock engine (which also has nothing), rather than inventing a fare
+    var service = railroadService(Set.of());
+    var itinerary = newItinerary(Place.forStop(JAMAICA), 0)
+      .transit(LIRR_ROUTE, "t1", 0, 1800, 5, 7, Place.forStop(RONKONKOMA), null, null, null)
+      .build();
+    var fare = service.calculateFares(itinerary);
+    assertTrue(fare.getLegProducts().get(itinerary.listTransitLegs().get(0)).isEmpty());
   }
 
   private static FareOffer offer(

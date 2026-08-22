@@ -215,7 +215,7 @@ public final class StationEquipmentMapper {
   }
 
   /** Minimal RFC 4180 parser — quoted fields with embedded commas/quotes/newlines. */
-  private static List<List<String>> parseCsv(BufferedReader reader) throws IOException {
+  static List<List<String>> parseCsv(BufferedReader reader) throws IOException {
     List<List<String>> records = new ArrayList<>();
     List<String> record = new ArrayList<>();
     StringBuilder field = new StringBuilder();

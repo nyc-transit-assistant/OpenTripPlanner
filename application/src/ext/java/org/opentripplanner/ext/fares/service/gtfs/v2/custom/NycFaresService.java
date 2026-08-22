@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.annotation.Nullable;
@@ -46,10 +47,28 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
 
   private final GtfsFaresService delegate;
   private final NycFareParams params;
+  private final RailroadFareTables railroadTables;
+  private final Map<String, Set<String>> peakTripsByFeed;
 
   public NycFaresService(GtfsFaresService delegate, NycFareParams params) {
+    this(
+      delegate,
+      params,
+      RailroadFareTables.of(Set.of(), List.of(), com.google.common.collect.ImmutableMultimap.of()),
+      Map.of()
+    );
+  }
+
+  public NycFaresService(
+    GtfsFaresService delegate,
+    NycFareParams params,
+    RailroadFareTables railroadTables,
+    Map<String, Set<String>> peakTripsByFeed
+  ) {
     this.delegate = Objects.requireNonNull(delegate);
     this.params = Objects.requireNonNull(params);
+    this.railroadTables = Objects.requireNonNull(railroadTables);
+    this.peakTripsByFeed = Objects.requireNonNull(peakTripsByFeed);
   }
 
   @Override
@@ -57,8 +76,9 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
     ItineraryFare stock = delegate.calculateFares(itinerary);
     var result = ItineraryFare.empty();
     Multimap<Leg, FareOffer> stockProducts = stock.getLegProducts();
+    Set<Leg> railroadPriced = composeRailroads(itinerary, result);
     for (var entry : stockProducts.entries()) {
-      if (!isOmnyLeg(entry.getKey())) {
+      if (!isOmnyLeg(entry.getKey()) && !railroadPriced.contains(entry.getKey())) {
         result.addFareProduct(entry.getKey(), entry.getValue());
       }
     }
@@ -192,6 +212,97 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
       )
       .min(Comparator.comparing(FareProduct::price))
       .orElse(null);
+  }
+
+  /**
+   * Price the zone/O-D railroads (LIRR, Metro-North, NJT rail): join maximal runs of
+   * consecutive legs of one railroad — a single ticket covers same-direction train changes —
+   * and price the end-to-end stop pair from the authored area-pair rules, picking peak or
+   * off-peak by the trips' peak flag and the cheapest matching ticket per rider category.
+   * Runs whose end-to-end pair prices to nothing (flat-fare light rail in the NJT feed,
+   * station pairs with no published fare) are left to the stock per-leg offers.
+   */
+  private Set<Leg> composeRailroads(Itinerary itinerary, ItineraryFare result) {
+    Set<Leg> priced = new java.util.HashSet<>();
+    if (railroadTables.isEmpty()) {
+      return priced;
+    }
+    List<TransitLeg> transitLegs = itinerary.listTransitLegs();
+    int i = 0;
+    while (i < transitLegs.size()) {
+      String feed = feedId(transitLegs.get(i));
+      if (!params.railroadFeeds().contains(feed)) {
+        i++;
+        continue;
+      }
+      int j = i;
+      while (j + 1 < transitLegs.size() && feedId(transitLegs.get(j + 1)).equals(feed)) {
+        j++;
+      }
+      List<TransitLeg> run = transitLegs.subList(i, j + 1);
+      priceRailroadRun(feed, run, result, priced);
+      i = j + 1;
+    }
+    return priced;
+  }
+
+  private void priceRailroadRun(
+    String feed,
+    List<TransitLeg> run,
+    ItineraryFare result,
+    Set<Leg> priced
+  ) {
+    var products = railroadTables.lookup(feed, run.getFirst().from().stop, run.getLast().to().stop);
+    if (products.isEmpty()) {
+      return;
+    }
+    boolean peak = run.stream().anyMatch(l -> isPeakTrip(feed, l));
+    var categories = new LinkedHashSet<String>();
+    for (FareProduct p : products) {
+      categories.add(p.category() == null ? null : p.category().id().getId());
+    }
+    boolean anyPriced = false;
+    for (String category : categories) {
+      FareProduct cheapest = products
+        .stream()
+        .filter(p ->
+          Objects.equals(p.category() == null ? null : p.category().id().getId(), category)
+        )
+        .filter(p -> peakApplicable(p, peak))
+        .min(Comparator.comparing(FareProduct::price))
+        .orElse(null);
+      if (cheapest != null) {
+        var offer = FareOffer.of(run.getFirst().startTime(), cheapest);
+        run.forEach(leg -> result.addFareProduct(leg, offer));
+        anyPriced = true;
+      }
+    }
+    if (anyPriced) {
+      priced.addAll(run);
+    }
+  }
+
+  /**
+   * Peak/off-peak product convention: product ids ending in {@code _peak} or {@code _offpeak}
+   * apply only on matching trains; unsuffixed products apply always.
+   */
+  private static boolean peakApplicable(FareProduct product, boolean peak) {
+    var id = product.id().getId();
+    if (id.endsWith("_peak")) {
+      return peak;
+    }
+    if (id.endsWith("_offpeak")) {
+      return !peak;
+    }
+    return true;
+  }
+
+  private boolean isPeakTrip(String feed, TransitLeg leg) {
+    var trip = leg.trip();
+    if (trip == null) {
+      return false;
+    }
+    return peakTripsByFeed.getOrDefault(feed, Set.of()).contains(trip.getId().getId());
   }
 
   /**

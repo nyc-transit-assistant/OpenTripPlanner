@@ -40,13 +40,15 @@ public record NycFareParams(
   Set<String> omnyFeeds,
   Set<OosPair> freeOutOfSystemTransfers,
   Duration transferWindow,
-  @Nullable ReducedFarePeakExclusion reducedFarePeakExclusion
+  @Nullable ReducedFarePeakExclusion reducedFarePeakExclusion,
+  Set<String> railroadFeeds
 ) implements Serializable {
   public NycFareParams {
     Objects.requireNonNull(subwayFeed);
     Objects.requireNonNull(omnyFeeds);
     Objects.requireNonNull(freeOutOfSystemTransfers);
     Objects.requireNonNull(transferWindow);
+    Objects.requireNonNull(railroadFeeds);
     if (!omnyFeeds.contains(subwayFeed)) {
       throw new IllegalArgumentException("omnyFeeds must contain the subway feed " + subwayFeed);
     }
@@ -58,7 +60,24 @@ public record NycFareParams(
     Set<OosPair> freeOutOfSystemTransfers,
     Duration transferWindow
   ) {
-    this(subwayFeed, omnyFeeds, freeOutOfSystemTransfers, transferWindow, null);
+    this(subwayFeed, omnyFeeds, freeOutOfSystemTransfers, transferWindow, null, Set.of());
+  }
+
+  public NycFareParams(
+    String subwayFeed,
+    Set<String> omnyFeeds,
+    Set<OosPair> freeOutOfSystemTransfers,
+    Duration transferWindow,
+    @Nullable ReducedFarePeakExclusion reducedFarePeakExclusion
+  ) {
+    this(
+      subwayFeed,
+      omnyFeeds,
+      freeOutOfSystemTransfers,
+      transferWindow,
+      reducedFarePeakExclusion,
+      Set.of()
+    );
   }
 
   /** An unordered pair of station (or stop) ids joined by a free out-of-system transfer. */
@@ -124,12 +143,17 @@ public record NycFareParams(
       );
     }
     var minutes = config.path("transferWindowMinutes").asInt(120);
+    var railroads = new HashSet<String>();
+    for (JsonNode feed : config.path("railroads")) {
+      railroads.add(feed.asText());
+    }
     return new NycFareParams(
       subwayFeed,
       omnyFeeds,
       pairs,
       Duration.ofMinutes(minutes),
-      peakExclusionFromConfig(config.path("reducedFarePeakExclusion"))
+      peakExclusionFromConfig(config.path("reducedFarePeakExclusion")),
+      railroads
     );
   }
 
