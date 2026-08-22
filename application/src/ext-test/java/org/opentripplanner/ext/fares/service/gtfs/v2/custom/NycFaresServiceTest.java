@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.opentripplanner.model.plan.TestItineraryBuilder.newItinerary;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -78,6 +81,16 @@ class NycFaresServiceTest {
   private static final FareProduct PATH_SINGLE = product(PATH, "single", 3.25f, null);
 
   private static final FeedScopedId EXPRESS_NETWORK = new FeedScopedId(BUS, "express");
+  private static final FeedScopedId SIR_NETWORK = new FeedScopedId(SUBWAY, "sir");
+
+  private static final FareProduct SIR_FREE_ADULT = product(SUBWAY, "sir_free", 0.00f, ADULT);
+  private static final FareProduct SIR_FREE_REDUCED = product(SUBWAY, "sir_free", 0.00f, REDUCED);
+  private static final FareProduct EXPRESS_REDUCED = product(
+    BUS,
+    "express_single",
+    3.60f,
+    BUS_REDUCED_CAT
+  );
 
   // subway stations: two joined by a designated OOS transfer, one unrelated
   private static final Station LEX_59 = station(SUBWAY, "CX613");
@@ -99,6 +112,10 @@ class NycFaresServiceTest {
   private static final Route BUS_ROUTE = route(BUS, "B41", TransitMode.BUS, null);
   private static final Route EXPRESS_ROUTE = route(BUS, "BM2", TransitMode.BUS, EXPRESS_NETWORK);
   private static final Route PATH_ROUTE = route(PATH, "PATH", TransitMode.RAIL, null);
+  private static final Route SIR_ROUTE = route(SUBWAY, "SI", TransitMode.RAIL, SIR_NETWORK);
+
+  private static final RegularStop SIR_STOP_1 = stop(SUBWAY, "S19N", null);
+  private static final RegularStop SIR_STOP_2 = stop(SUBWAY, "S22N", null);
 
   private static final NycFaresService SERVICE = new NycFaresService(
     stockService(),
@@ -247,6 +264,61 @@ class NycFaresServiceTest {
     assertEquals(Money.usDollars(3.00f), offer(fare, legs.get(1), ADULT).fareProduct().price());
   }
 
+  @Test
+  void freeSirRideIsZeroAndPreservesTheTransfer() {
+    var itinerary = newItinerary(Place.forStop(UNION_L), 0)
+      .transit(SUBWAY_ROUTE, "t1", 0, 600, 5, 7, Place.forStop(FAR_PLATFORM), null, null, null)
+      .walk(60, Place.forStop(SIR_STOP_1))
+      .transit(SIR_ROUTE, "t2", 900, 1500, 5, 7, Place.forStop(SIR_STOP_2), null, null, null)
+      .walk(60, Place.forStop(BUS_STOP_1))
+      .transit(BUS_ROUTE, "t3", 1800, 2400, 5, 7, Place.forStop(BUS_STOP_2), null, null, null)
+      .build();
+    var fare = SERVICE.calculateFares(itinerary);
+    var legs = itinerary.listTransitLegs();
+    var subway = offer(fare, legs.get(0), ADULT);
+    var sir = offer(fare, legs.get(1), ADULT);
+    var bus = offer(fare, legs.get(2), ADULT);
+    assertEquals(Money.usDollars(0.00f), sir.fareProduct().price());
+    assertNotEquals(subway.uniqueId(), sir.uniqueId());
+    // the free SIR ride neither consumed nor granted anything: the bus still rides free
+    assertEquals(subway.uniqueId(), bus.uniqueId());
+  }
+
+  @Test
+  void reducedExpressAtPeakPaysFullPrice() {
+    // SERVICE_DAY 2020-02-02 is a Sunday and builder times are UTC
+    var peakService = new NycFaresService(
+      stockService(),
+      new NycFareParams(
+        SUBWAY,
+        Set.of(SUBWAY, BUS),
+        Set.of(),
+        Duration.ofMinutes(120),
+        new NycFareParams.ReducedFarePeakExclusion(
+          "express_single",
+          "reduced",
+          List.of(new NycFareParams.PeakWindow(LocalTime.MIDNIGHT, LocalTime.of(2, 0))),
+          Set.of(DayOfWeek.SUNDAY),
+          ZoneOffset.UTC
+        )
+      )
+    );
+    var peak = newItinerary(Place.forStop(BUS_STOP_1), 0)
+      .transit(EXPRESS_ROUTE, "t1", 600, 1200, 5, 7, Place.forStop(BUS_STOP_2), null, null, null)
+      .build();
+    var peakFare = peakService.calculateFares(peak);
+    var reduced = offer(peakFare, peak.listTransitLegs().get(0), REDUCED);
+    assertEquals(Money.usDollars(7.25f), reduced.fareProduct().price());
+    assertEquals("reduced", reduced.fareProduct().category().id().getId());
+
+    var offPeak = newItinerary(Place.forStop(BUS_STOP_1), 0)
+      .transit(EXPRESS_ROUTE, "t1", 8000, 8600, 5, 7, Place.forStop(BUS_STOP_2), null, null, null)
+      .build();
+    var offPeakFare = peakService.calculateFares(offPeak);
+    var offPeakReduced = offer(offPeakFare, offPeak.listTransitLegs().get(0), REDUCED);
+    assertEquals(Money.usDollars(3.60f), offPeakReduced.fareProduct().price());
+  }
+
   private static FareOffer offer(
     org.opentripplanner.model.fare.ItineraryFare fare,
     Leg leg,
@@ -276,9 +348,13 @@ class NycFaresServiceTest {
         FareLegRule.of(new FeedScopedId(BUS, "r2"), List.of(BUS_ADULT, BUS_REDUCED))
           .withLegGroupId(new FeedScopedId(BUS, "local"))
           .build(),
-        FareLegRule.of(new FeedScopedId(BUS, "r3"), List.of(EXPRESS_ADULT))
+        FareLegRule.of(new FeedScopedId(BUS, "r3"), List.of(EXPRESS_ADULT, EXPRESS_REDUCED))
           .withLegGroupId(new FeedScopedId(BUS, "express"))
           .withNetworkId(EXPRESS_NETWORK)
+          .build(),
+        FareLegRule.of(new FeedScopedId(SUBWAY, "r5"), List.of(SIR_FREE_ADULT, SIR_FREE_REDUCED))
+          .withLegGroupId(new FeedScopedId(SUBWAY, "sir"))
+          .withNetworkId(SIR_NETWORK)
           .build(),
         FareLegRule.of(new FeedScopedId(PATH, "r4"), List.of(PATH_SINGLE))
           .withLegGroupId(new FeedScopedId(PATH, "path"))

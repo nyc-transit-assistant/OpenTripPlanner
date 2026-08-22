@@ -128,6 +128,14 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
         previous = leg;
         continue;
       }
+      base = applyPeakExclusion(leg, base, stockProducts.get(leg));
+      if (base.price().isZero()) {
+        // A free ride (SIR between non-collection stations): its own zero-price purchase.
+        // It neither consumes the transfer budget nor grants one, and leaves the chain intact.
+        result.addFareProduct(leg, FareOffer.of(leg.startTime(), base));
+        previous = leg;
+        continue;
+      }
       boolean inWindow =
         windowStart != null && !leg.startTime().isAfter(windowStart.plus(params.transferWindow()));
       boolean bothSubway = previous != null && isSubway(previous) && isSubway(leg);
@@ -184,6 +192,36 @@ public class NycFaresService implements org.opentripplanner.routing.fares.FareSe
       )
       .min(Comparator.comparing(FareProduct::price))
       .orElse(null);
+  }
+
+  /**
+   * The reduced fare on peak-excluded products (express bus) is valid off-peak only: during the
+   * peak windows the reduced rider pays the full price, surfaced as a reduced-category product
+   * at the highest price any category pays for the same product.
+   */
+  private FareProduct applyPeakExclusion(
+    TransitLeg leg,
+    FareProduct base,
+    Collection<FareOffer> offers
+  ) {
+    var exclusion = params.reducedFarePeakExclusion();
+    if (
+      exclusion == null ||
+      base.category() == null ||
+      !exclusion.reducedCategory().equals(base.category().id().getId()) ||
+      !exclusion.productId().equals(base.id().getId()) ||
+      !exclusion.isPeak(leg.startTime())
+    ) {
+      return base;
+    }
+    Money peakPrice = offers
+      .stream()
+      .map(FareOffer::fareProduct)
+      .filter(p -> p.id().getId().equals(exclusion.productId()))
+      .map(FareProduct::price)
+      .max(Comparator.naturalOrder())
+      .orElse(base.price());
+    return FareProduct.of(base.id(), base.name(), peakPrice).withCategory(base.category()).build();
   }
 
   private boolean isOmnyLeg(Leg leg) {
