@@ -125,7 +125,8 @@ public class GtfsRealTimeUpdateHandler {
     List<GtfsRealtime.TripUpdate> updates,
     List<TripReplacementPeriod> tripReplacementPeriods,
     boolean scopedFullDatasetClear,
-    List<String> feedIds
+    List<String> feedIds,
+    @Nullable UnmatchedTripCanceler unmatchedTripCanceler
   ) {
     if (feedIds == null || feedIds.isEmpty()) {
       throw new IllegalArgumentException("feedIds must contain at least one feedId");
@@ -414,6 +415,21 @@ public class GtfsRealTimeUpdateHandler {
       successes,
       errors
     );
+
+    // Ghost-trip cancellation: an empty batch is a feed hiccup, not evidence that every
+    // scheduled trip is missing — sweeping on it would cancel the whole feed's service.
+    if (unmatchedTripCanceler != null && !updates.isEmpty()) {
+      unmatchedTripCanceler.sweep(
+        transitEditorService,
+        buffer,
+        seenTripIds,
+        feedIds,
+        instantNow.get(),
+        localDateNow.get(),
+        successes,
+        errors
+      );
+    }
 
     var updateResult = UpdateResult.of(successes, errors);
 

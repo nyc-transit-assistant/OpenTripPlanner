@@ -19,6 +19,7 @@ public record PollingTripUpdaterParameters(
   @Nullable String trainNumberSynthesisIdPrefix,
   @Nullable String trainNumberSynthesisRouteId,
   boolean scopedFullDatasetClear,
+  int cancelUnmatchedAfterElapsedStops,
   ForwardsDelayPropagationType forwardsDelayPropagationType,
   BackwardsDelayPropagationType backwardsDelayPropagationType,
 

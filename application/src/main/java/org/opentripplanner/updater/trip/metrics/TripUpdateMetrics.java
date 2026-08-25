@@ -30,7 +30,7 @@ public class TripUpdateMetrics {
    * behind the feed proxy. The URL path ("nyct/gtfs-ace") is the stable identity: it names
    * the upstream feed regardless of which host serves it.
    */
-  static String updaterLabel(String url) {
+  public static String updaterLabel(String url) {
     try {
       String path = URI.create(url).getPath();
       if (path != null && !path.isBlank()) {

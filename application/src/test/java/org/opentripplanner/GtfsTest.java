@@ -278,7 +278,8 @@ public abstract class GtfsTest {
               updates,
               List.of(),
               false,
-              List.of(FEED_ID)
+              List.of(FEED_ID),
+              null
             );
         })
         .get();

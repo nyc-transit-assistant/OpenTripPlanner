@@ -93,6 +93,19 @@ public class PollingTripUpdaterConfig {
         )
         .asBoolean(false),
       c
+        .of("cancelUnmatchedAfterElapsedStops")
+        .since(V2_9)
+        .summary("Cancel scheduled trips unmatched by realtime after this many stops elapse.")
+        .description(
+          "Ghost-trip cancellation. When a scheduled trip's first N stop departures have " +
+            "passed and no trip update has referenced the trip this service day, cancel it in " +
+            "the realtime snapshot — the operator's feed gives no evidence the trip is " +
+            "running. A trip that was matched earlier and then dropped out of the feed is " +
+            "never cancelled (mid-route tracking loss is routine for bus AVL), and a trip " +
+            "that finally appears recovers automatically on the next poll. 0 disables."
+        )
+        .asInt(0),
+      c
         .of("forwardsDelayPropagationType")
         .since(V2_8)
         .summary(ForwardsDelayPropagationType.DEFAULT.typeDescription())

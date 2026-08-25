@@ -104,6 +104,15 @@ public class GtfsRtTestHelper {
     return applyTripUpdates(updates, tripReplacementPeriods, incrementality, false);
   }
 
+  @javax.annotation.Nullable
+  private UnmatchedTripCanceler unmatchedTripCanceler;
+
+  /** Enable ghost-trip cancellation for subsequent {@code applyTripUpdates} calls. */
+  public GtfsRtTestHelper withUnmatchedTripCanceler(UnmatchedTripCanceler canceler) {
+    this.unmatchedTripCanceler = canceler;
+    return this;
+  }
+
   public UpdateResult applyTripUpdates(
     List<GtfsRealtime.TripUpdate> updates,
     List<TripReplacementPeriod> tripReplacementPeriods,
@@ -132,7 +141,8 @@ public class GtfsRtTestHelper {
                 updates,
                 tripReplacementPeriods,
                 false,
-                List.of(transitTestEnvironment.feedId())
+                List.of(transitTestEnvironment.feedId()),
+                unmatchedTripCanceler
               )
           );
         })

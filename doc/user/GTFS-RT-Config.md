@@ -95,22 +95,23 @@ HTTP request and polled regularly.
 <!-- stop-time-updater BEGIN -->
 <!-- NOTE! This section is auto-generated. Do not change, change doc in code instead. -->
 
-| Config Parameter                                                      |       Type      | Summary                                                                               |  Req./Opt. | Default Value        | Since |
-|-----------------------------------------------------------------------|:---------------:|---------------------------------------------------------------------------------------|:----------:|----------------------|:-----:|
-| type = "stop-time-updater"                                            |      `enum`     | The type of the updater.                                                              | *Required* |                      |  1.5  |
-| [backwardsDelayPropagationType](#u__5__backwardsDelayPropagationType) |      `enum`     | How backwards propagation should be handled.                                          | *Optional* | `"required-no-data"` |  2.2  |
-| [feedId](#u__5__feedId)                                               |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to.         | *Optional* |                      |  1.5  |
-| [forwardsDelayPropagationType](#u__5__forwardsDelayPropagationType)   |      `enum`     | How forwards propagation should be handled.                                           | *Optional* | `"default"`          |  2.8  |
-| frequency                                                             |    `duration`   | How often the data should be downloaded.                                              | *Optional* | `"PT1M"`             |  1.5  |
-| fuzzyTripMatching                                                     |    `boolean`    | If the trips should be matched fuzzily.                                               | *Optional* | `false`              |  1.5  |
-| [partialTripIdMatching](#u__5__partialTripIdMatching)                 |    `boolean`    | Resolve realtime trip ids that are a suffix of the static GTFS trip id.               | *Optional* | `false`              |  2.9  |
-| [scopedFullDatasetClear](#u__5__scopedFullDatasetClear)               |    `boolean`    | Never clear the whole feed on FULL_DATASET updates; clear only this updater's routes. | *Optional* | `false`              |  2.9  |
-| [trainNumberMatching](#u__5__trainNumberMatching)                     |    `boolean`    | Resolve realtime trips by train number instead of trip id.                            | *Optional* | `false`              |  2.9  |
-| [trainNumberSynthesisIdPrefix](#u__5__trainNumberSynthesisIdPrefix)   |     `string`    | Synthesize unresolved ADDED/id-less trains as `<prefix><train>-<date>`.               | *Optional* |                      |  2.9  |
-| trainNumberSynthesisRouteId                                           |     `string`    | Route id assigned to synthesized trains whose descriptor carries none.                | *Optional* |                      |  2.9  |
-| [url](#u__5__url)                                                     |     `string`    | The URL of the GTFS-RT resource.                                                      | *Required* |                      |  1.5  |
-| [feedIds](#u__5__feedIds)                                             |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.                     | *Optional* |                      |  2.9  |
-| [headers](#u__5__headers)                                             | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.            | *Optional* |                      |  2.3  |
+| Config Parameter                                                            |       Type      | Summary                                                                               |  Req./Opt. | Default Value        | Since |
+|-----------------------------------------------------------------------------|:---------------:|---------------------------------------------------------------------------------------|:----------:|----------------------|:-----:|
+| type = "stop-time-updater"                                                  |      `enum`     | The type of the updater.                                                              | *Required* |                      |  1.5  |
+| [backwardsDelayPropagationType](#u__5__backwardsDelayPropagationType)       |      `enum`     | How backwards propagation should be handled.                                          | *Optional* | `"required-no-data"` |  2.2  |
+| [cancelUnmatchedAfterElapsedStops](#u__5__cancelUnmatchedAfterElapsedStops) |    `integer`    | Cancel scheduled trips unmatched by realtime after this many stops elapse.            | *Optional* | `0`                  |  2.9  |
+| [feedId](#u__5__feedId)                                                     |     `string`    | Deprecated: prefer `feedIds`. Single static GTFS feed id to apply updates to.         | *Optional* |                      |  1.5  |
+| [forwardsDelayPropagationType](#u__5__forwardsDelayPropagationType)         |      `enum`     | How forwards propagation should be handled.                                           | *Optional* | `"default"`          |  2.8  |
+| frequency                                                                   |    `duration`   | How often the data should be downloaded.                                              | *Optional* | `"PT1M"`             |  1.5  |
+| fuzzyTripMatching                                                           |    `boolean`    | If the trips should be matched fuzzily.                                               | *Optional* | `false`              |  1.5  |
+| [partialTripIdMatching](#u__5__partialTripIdMatching)                       |    `boolean`    | Resolve realtime trip ids that are a suffix of the static GTFS trip id.               | *Optional* | `false`              |  2.9  |
+| [scopedFullDatasetClear](#u__5__scopedFullDatasetClear)                     |    `boolean`    | Never clear the whole feed on FULL_DATASET updates; clear only this updater's routes. | *Optional* | `false`              |  2.9  |
+| [trainNumberMatching](#u__5__trainNumberMatching)                           |    `boolean`    | Resolve realtime trips by train number instead of trip id.                            | *Optional* | `false`              |  2.9  |
+| [trainNumberSynthesisIdPrefix](#u__5__trainNumberSynthesisIdPrefix)         |     `string`    | Synthesize unresolved ADDED/id-less trains as `<prefix><train>-<date>`.               | *Optional* |                      |  2.9  |
+| trainNumberSynthesisRouteId                                                 |     `string`    | Route id assigned to synthesized trains whose descriptor carries none.                | *Optional* |                      |  2.9  |
+| [url](#u__5__url)                                                           |     `string`    | The URL of the GTFS-RT resource.                                                      | *Required* |                      |  1.5  |
+| [feedIds](#u__5__feedIds)                                                   |    `string[]`   | The static GTFS feed ids the real-time data should be applied to.                     | *Optional* |                      |  2.9  |
+| [headers](#u__5__headers)                                                   | `map of string` | HTTP headers to add to the request. Any header key, value can be inserted.            | *Optional* |                      |  2.3  |
 
 
 ##### Parameter details
@@ -133,6 +134,15 @@ How backwards propagation should be handled.
  - `always` Propagates delays backwards on stops with no estimates regardless if it's required or not.
        The updated times are exposed through APIs.
 
+
+<h4 id="u__5__cancelUnmatchedAfterElapsedStops">cancelUnmatchedAfterElapsedStops</h4>
+
+**Since version:** `2.9` ∙ **Type:** `integer` ∙ **Cardinality:** `Optional` ∙ **Default value:** `0`   
+**Path:** /updaters/[5] 
+
+Cancel scheduled trips unmatched by realtime after this many stops elapse.
+
+Ghost-trip cancellation. When a scheduled trip's first N stop departures have passed and no trip update has referenced the trip this service day, cancel it in the realtime snapshot — the operator's feed gives no evidence the trip is running. A trip that was matched earlier and then dropped out of the feed is never cancelled (mid-route tracking loss is routine for bus AVL), and a trip that finally appears recovers automatically on the next poll. 0 disables.
 
 <h4 id="u__5__feedId">feedId</h4>
 

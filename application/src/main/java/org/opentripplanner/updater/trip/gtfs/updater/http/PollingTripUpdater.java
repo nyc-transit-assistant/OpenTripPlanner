@@ -5,9 +5,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 import org.opentripplanner.updater.spi.PollingGraphUpdater;
 import org.opentripplanner.updater.spi.UpdateResult;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealTimeTripUpdateAdapter;
+import org.opentripplanner.updater.trip.gtfs.UnmatchedTripCanceler;
 import org.opentripplanner.updater.trip.gtfs.interpolation.BackwardsDelayPropagationType;
 import org.opentripplanner.updater.trip.gtfs.interpolation.ForwardsDelayPropagationType;
 import org.opentripplanner.updater.trip.gtfs.updater.TripUpdateGraphWriterRunnable;
@@ -64,6 +66,11 @@ public class PollingTripUpdater extends PollingGraphUpdater {
   /** See {@code PollingTripUpdaterConfig}: shared-feed updaters must never clear unscoped. */
   private final boolean scopedFullDatasetClear;
 
+  /** Ghost-trip cancellation state; null when the feature is disabled. Long-lived so the
+   * matched-trip memory survives polling cycles. */
+  @Nullable
+  private final UnmatchedTripCanceler unmatchedTripCanceler;
+
   public PollingTripUpdater(
     PollingTripUpdaterParameters parameters,
     GtfsRealTimeTripUpdateAdapter adapter
@@ -81,6 +88,13 @@ public class PollingTripUpdater extends PollingGraphUpdater {
     this.trainNumberMatching = parameters.trainNumberMatching();
     this.trainNumberSynthesisIdPrefix = parameters.trainNumberSynthesisIdPrefix();
     this.trainNumberSynthesisRouteId = parameters.trainNumberSynthesisRouteId();
+
+    this.unmatchedTripCanceler = parameters.cancelUnmatchedAfterElapsedStops() > 0
+      ? new UnmatchedTripCanceler(
+          parameters.cancelUnmatchedAfterElapsedStops(),
+          TripUpdateMetrics.updaterLabel(parameters.url())
+        )
+      : null;
 
     var batchMetrics = BatchTripUpdateMetrics.createBatch(parameters);
     this.recordMetrics = batchMetrics != null ? batchMetrics::setGauges : TripUpdateMetrics.NOOP;
@@ -115,6 +129,7 @@ public class PollingTripUpdater extends PollingGraphUpdater {
         updateSource.tripReplacementPeriodsOfLastUpdates(),
         scopedFullDatasetClear,
         feedIds,
+        unmatchedTripCanceler,
         recordMetrics,
         recordCrash
       );

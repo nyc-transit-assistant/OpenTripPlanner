@@ -4,6 +4,7 @@ import com.google.transit.realtime.GtfsRealtime.TripUpdate;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 import org.opentripplanner.updater.GraphWriterRunnable;
 import org.opentripplanner.updater.RealTimeUpdateContext;
 import org.opentripplanner.updater.spi.UpdateResult;
@@ -12,6 +13,7 @@ import org.opentripplanner.updater.trip.gtfs.GtfsRealTimeTripUpdateAdapter;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealtimePartialTripIdMatcher;
 import org.opentripplanner.updater.trip.gtfs.GtfsRealtimeTrainNumberTripMatcher;
 import org.opentripplanner.updater.trip.gtfs.TripReplacementPeriod;
+import org.opentripplanner.updater.trip.gtfs.UnmatchedTripCanceler;
 import org.opentripplanner.updater.trip.gtfs.interpolation.BackwardsDelayPropagationType;
 import org.opentripplanner.updater.trip.gtfs.interpolation.ForwardsDelayPropagationType;
 
@@ -41,6 +43,10 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
   private final List<TripReplacementPeriod> tripReplacementPeriods;
 
   private final List<String> feedIds;
+
+  @Nullable
+  private final UnmatchedTripCanceler unmatchedTripCanceler;
+
   private final boolean scopedFullDatasetClear;
   private final Consumer<UpdateResult> sendMetrics;
 
@@ -83,6 +89,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
       tripReplacementPeriods,
       scopedFullDatasetClear,
       feedIds,
+      null,
       sendMetrics,
       ignored -> {}
     );
@@ -102,6 +109,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     List<TripReplacementPeriod> tripReplacementPeriods,
     boolean scopedFullDatasetClear,
     List<String> feedIds,
+    @Nullable UnmatchedTripCanceler unmatchedTripCanceler,
     Consumer<UpdateResult> sendMetrics,
     Consumer<Throwable> sendCrash
   ) {
@@ -121,6 +129,7 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
     if (this.feedIds.isEmpty()) {
       throw new IllegalArgumentException("feedIds must contain at least one feedId");
     }
+    this.unmatchedTripCanceler = unmatchedTripCanceler;
     this.sendMetrics = sendMetrics;
     this.sendCrash = Objects.requireNonNull(sendCrash);
   }
@@ -155,7 +164,8 @@ public class TripUpdateGraphWriterRunnable implements GraphWriterRunnable {
           updates,
           tripReplacementPeriods,
           scopedFullDatasetClear,
-          feedIds
+          feedIds,
+          unmatchedTripCanceler
         );
     } catch (RuntimeException | Error e) {
       sendCrash.accept(e);
