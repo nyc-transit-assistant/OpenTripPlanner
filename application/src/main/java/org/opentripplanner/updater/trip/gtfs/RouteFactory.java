@@ -45,8 +45,10 @@ class RouteFactory {
 
         var addedRouteExtension = AddedRoute.ofTripDescriptor(update);
 
-        var agency = transitService
-          .findAgency(new FeedScopedId(tripId.getFeedId(), addedRouteExtension.agencyId()))
+        var agencyId = addedRouteExtension.agencyId();
+        var agency = Optional.ofNullable(agencyId)
+          .filter(a -> !a.isBlank())
+          .flatMap(a -> transitService.findAgency(new FeedScopedId(tripId.getFeedId(), a)))
           .orElseGet(() -> fallbackAgency(tripId.getFeedId()));
 
         builder.withAgency(agency);

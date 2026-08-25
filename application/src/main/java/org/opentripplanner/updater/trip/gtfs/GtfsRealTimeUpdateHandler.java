@@ -405,6 +405,20 @@ public class GtfsRealTimeUpdateHandler {
         errors.add(DataValidationExceptionMapper.map(e).toError());
       } catch (UpdateException e) {
         errors.add(e.toError());
+      } catch (RuntimeException e) {
+        // One malformed entity must not kill the whole batch: NJT's Meadowlands event
+        // shuttles once arrived with no resolvable route or agency and a single
+        // IllegalArgumentException stalled the feed entirely. Record and move on.
+        LOG.error("Skipping trip update that failed to apply: {}", e.toString(), e);
+        errors.add(
+          new UpdateError(
+            null,
+            org.opentripplanner.updater.spi.UpdateErrorType.UNKNOWN,
+            null,
+            null,
+            describeUpdate(rawTripUpdate)
+          )
+        );
       }
     }
 
@@ -650,6 +664,15 @@ public class GtfsRealTimeUpdateHandler {
       }
     }
     return false;
+  }
+
+  private static String describeUpdate(GtfsRealtime.TripUpdate update) {
+    var trip = update.getTrip();
+    return "trip=%s route=%s start=%s".formatted(
+      trip.getTripId(),
+      trip.getRouteId(),
+      trip.getStartDate()
+    );
   }
 
   private @Nullable String resolveFeedIdForRoute(String routeId, List<String> feedIds) {
